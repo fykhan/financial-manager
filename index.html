@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GradPlan · Financial Planner</title>
+  <meta name="description" content="A personal financial planner for newly graduated students: income, expenses, installments, subscriptions and savings goals with automatic calculations." />
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <div id="app" class="app">
+    <!-- Sidebar navigation -->
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="brand-mark">₲</span>
+        <div class="brand-text">
+          <strong>GradPlan</strong>
+          <small>Financial planner</small>
+        </div>
+      </div>
+      <nav class="nav" id="nav">
+        <button class="nav-item" data-view="dashboard" aria-current="true">
+          <span class="nav-ico">◧</span> Dashboard
+        </button>
+        <button class="nav-item" data-view="income">
+          <span class="nav-ico">↗</span> Income
+        </button>
+        <button class="nav-item" data-view="expenses">
+          <span class="nav-ico">↘</span> Expenses
+        </button>
+        <button class="nav-item" data-view="installments">
+          <span class="nav-ico">▤</span> Installments
+        </button>
+        <button class="nav-item" data-view="subscriptions">
+          <span class="nav-ico">⟳</span> Subscriptions
+        </button>
+        <button class="nav-item" data-view="goals">
+          <span class="nav-ico">◎</span> Savings goals
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <button class="btn btn-ghost btn-sm" id="btn-theme" title="Toggle light / dark">◐ Theme</button>
+        <button class="btn btn-ghost btn-sm" id="btn-data" title="Import / export / reset">⚙ Data</button>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+      <header class="topbar">
+        <button class="btn btn-ghost btn-sm menu-toggle" id="menu-toggle" aria-label="Menu">☰</button>
+        <h1 class="view-title" id="view-title">Dashboard</h1>
+        <div class="topbar-actions">
+          <label class="field-inline" title="Display currency">
+            <select id="currency-select" class="input input-sm"></select>
+          </label>
+          <button class="btn btn-primary btn-sm" id="btn-add-primary">+ Add</button>
+        </div>
+      </header>
+
+      <div class="view-container" id="view-container"><!-- views render here --></div>
+    </main>
+  </div>
+
+  <!-- Modal host -->
+  <div class="modal-backdrop" id="modal-backdrop" hidden>
+    <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-head">
+        <h2 id="modal-title">Add</h2>
+        <button class="btn btn-ghost btn-icon" id="modal-close" aria-label="Close">✕</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+    </div>
+  </div>
+
+  <!-- Toast host -->
+  <div class="toast-host" id="toast-host" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
