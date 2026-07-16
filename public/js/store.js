@@ -1,6 +1,7 @@
-// store.js — data model, persistence (localStorage), import/export, sample data
+// store.js — data model, persistence (FastAPI + Neon backend), import/export
 
-const KEY = 'gradplan.v1';
+import { get, post, patch as apiPatch, del } from './api.js';
+import { toast } from './ui.js';
 
 const emptyData = () => ({
   version: 1,
@@ -13,22 +14,13 @@ const emptyData = () => ({
 });
 
 const listeners = new Set();
-let data = load();
+let data = emptyData();
 
 function uid() {
   return 'id_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
 
-function load() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (!raw) return withSample(emptyData());
-    const parsed = JSON.parse(raw);
-    return normalize(parsed);
-  } catch {
-    return withSample(emptyData());
-  }
-}
+function notify() { listeners.forEach(fn => fn(data)); }
 
 function normalize(parsed) {
   const base = emptyData();
@@ -44,20 +36,38 @@ function normalize(parsed) {
   };
 }
 
-function persist() {
-  try { localStorage.setItem(KEY, JSON.stringify(data)); } catch { /* quota / private mode */ }
-  listeners.forEach(fn => fn(data));
+/** Apply a local change and notify synchronously, fire the write in the
+ * background, and roll back + toast if the server rejects it. */
+async function optimisticWrite(applyLocal, request, failMessage) {
+  const prev = data;
+  applyLocal();
+  notify();
+  try {
+    await request();
+  } catch (err) {
+    data = prev;
+    notify();
+    toast(`${failMessage}: ${err.message}`, 'err');
+    throw err;
+  }
 }
 
 // ---- public API ----
+export async function init() {
+  data = normalize(await get('/api/data'));
+}
+
 export function getData() { return data; }
 export function getSettings() { return data.settings; }
 
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
-export function updateSettings(patch) {
-  data.settings = { ...data.settings, ...patch };
-  persist();
+export function updateSettings(patchObj) {
+  return optimisticWrite(
+    () => { data = { ...data, settings: { ...data.settings, ...patchObj } }; },
+    () => apiPatch('/api/settings', patchObj),
+    'Could not save settings',
+  );
 }
 
 const COLLECTIONS = ['income', 'expenses', 'installments', 'subscriptions', 'goals'];
@@ -65,37 +75,58 @@ const COLLECTIONS = ['income', 'expenses', 'installments', 'subscriptions', 'goa
 export function add(collection, record) {
   if (!COLLECTIONS.includes(collection)) throw new Error('bad collection ' + collection);
   const rec = { ...record, id: uid(), createdAt: new Date().toISOString() };
-  data[collection].push(rec);
-  persist();
-  return rec;
+  return optimisticWrite(
+    () => { data = { ...data, [collection]: [...data[collection], rec] }; },
+    () => post(`/api/${collection}`, rec),
+    'Could not save',
+  ).then(() => rec);
 }
 
-export function update(collection, id, patch) {
-  const list = data[collection];
-  const idx = list.findIndex(r => r.id === id);
-  if (idx === -1) return null;
-  list[idx] = { ...list[idx], ...patch, id };
-  persist();
-  return list[idx];
+export function update(collection, id, patchObj) {
+  const idx = data[collection].findIndex(r => r.id === id);
+  if (idx === -1) return Promise.resolve(null);
+  const updated = { ...data[collection][idx], ...patchObj, id };
+  return optimisticWrite(
+    () => {
+      const list = [...data[collection]];
+      list[idx] = updated;
+      data = { ...data, [collection]: list };
+    },
+    () => apiPatch(`/api/${collection}/${id}`, patchObj),
+    'Could not save',
+  ).then(() => updated);
 }
 
 export function remove(collection, id) {
-  data[collection] = data[collection].filter(r => r.id !== id);
-  persist();
+  return optimisticWrite(
+    () => { data = { ...data, [collection]: data[collection].filter(r => r.id !== id) }; },
+    () => del(`/api/${collection}/${id}`),
+    'Could not delete',
+  );
 }
 
 export function getById(collection, id) {
   return data[collection].find(r => r.id === id) || null;
 }
 
-export function resetAll() {
-  data = emptyData();
-  persist();
+export async function resetAll() {
+  try {
+    data = normalize(await post('/api/data/reset'));
+    notify();
+  } catch (err) {
+    toast(`Could not erase data: ${err.message}`, 'err');
+    throw err;
+  }
 }
 
-export function loadSample() {
-  data = withSample(emptyData());
-  persist();
+export async function loadSample() {
+  try {
+    data = normalize(await post('/api/data/sample'));
+    notify();
+  } catch (err) {
+    toast(`Could not load sample data: ${err.message}`, 'err');
+    throw err;
+  }
 }
 
 // ---- import / export ----
@@ -103,11 +134,22 @@ export function exportJSON() {
   return JSON.stringify(data, null, 2);
 }
 
-export function importJSON(text) {
-  const parsed = JSON.parse(text);
-  if (typeof parsed !== 'object' || !parsed) throw new Error('Not a valid backup file');
-  data = normalize(parsed);
-  persist();
+export async function importJSON(text) {
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+    if (typeof parsed !== 'object' || !parsed) throw new Error('Not a valid backup file');
+  } catch (err) {
+    toast(`Could not import: ${err.message}`, 'err');
+    throw err;
+  }
+  try {
+    data = normalize(await post('/api/data/import', parsed));
+    notify();
+  } catch (err) {
+    toast(`Could not import: ${err.message}`, 'err');
+    throw err;
+  }
 }
 
 /** Flatten everything into one CSV for spreadsheets. */
@@ -120,41 +162,4 @@ export function exportCSV() {
   data.installments.forEach(it => rows.push(['Installment', it.name, '', it.monthlyPayment, 'monthly', `principal: ${it.principal}, term: ${it.termMonths}mo, apr: ${it.apr || 0}%, start: ${it.startDate || ''}`, it.notes || '']));
   data.goals.forEach(g => rows.push(['Goal', g.name, '', g.target, '', `saved: ${g.saved}, monthly: ${g.monthlyContribution}, deadline: ${g.deadline || ''}`, g.notes || '']));
   return rows.map(r => r.map(q).join(',')).join('\n');
-}
-
-// ---- sample data for first run ----
-function withSample(d) {
-  const today = new Date();
-  const iso = (y, m, day) => new Date(y, m, day).toISOString().slice(0, 10);
-  const thisYear = today.getFullYear();
-  const soon = new Date(today.getTime() + 12 * 86400000).toISOString().slice(0, 10);
-  const laterRenewal = new Date(today.getTime() + 25 * 86400000).toISOString().slice(0, 10);
-
-  d.settings.name = '';
-  d.income = [
-    { id: uid(), source: 'Junior Developer salary', amount: 3800, frequency: 'monthly', type: 'net', notes: 'Take-home after tax' },
-    { id: uid(), source: 'Freelance / side projects', amount: 450, frequency: 'monthly', type: 'net', notes: '' },
-  ];
-  d.expenses = [
-    { id: uid(), name: 'Rent', category: 'Housing', amount: 1200, frequency: 'monthly', notes: 'Shared apartment' },
-    { id: uid(), name: 'Groceries', category: 'Food', amount: 320, frequency: 'monthly', notes: '' },
-    { id: uid(), name: 'Utilities', category: 'Housing', amount: 110, frequency: 'monthly', notes: 'Electric + water + internet' },
-    { id: uid(), name: 'Transit pass', category: 'Transport', amount: 75, frequency: 'monthly', notes: '' },
-    { id: uid(), name: 'Health insurance', category: 'Health', amount: 180, frequency: 'monthly', notes: '' },
-    { id: uid(), name: 'Phone plan', category: 'Bills', amount: 40, frequency: 'monthly', notes: '' },
-  ];
-  d.installments = [
-    { id: uid(), name: 'Student loan', principal: 24000, monthlyPayment: 280, termMonths: 120, startDate: iso(thisYear, 0, 1), apr: 4.5, notes: 'Federal loan' },
-    { id: uid(), name: 'Laptop (financed)', principal: 1600, monthlyPayment: 145, termMonths: 12, startDate: iso(thisYear, today.getMonth() - 3, 5), apr: 0, notes: '0% promo' },
-  ];
-  d.subscriptions = [
-    { id: uid(), name: 'Spotify', amount: 11, cycle: 'monthly', category: 'Entertainment', nextRenewal: soon, notes: '' },
-    { id: uid(), name: 'Gym membership', amount: 35, cycle: 'monthly', category: 'Health', nextRenewal: laterRenewal, notes: '' },
-    { id: uid(), name: 'Cloud storage', amount: 100, cycle: 'annually', category: 'Software', nextRenewal: iso(thisYear + 1, 2, 10), notes: '2TB plan' },
-  ];
-  d.goals = [
-    { id: uid(), name: 'Emergency fund', target: 10000, saved: 2400, monthlyContribution: 400, deadline: iso(thisYear + 1, 11, 31), notes: '3–6 months of expenses' },
-    { id: uid(), name: 'Travel fund', target: 3000, saved: 600, monthlyContribution: 150, deadline: '', notes: '' },
-  ];
-  return d;
 }

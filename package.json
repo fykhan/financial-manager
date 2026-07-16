@@ -4,8 +4,8 @@
   "description": "A personal financial planner for newly graduated students — track income, expenses, installments, subscriptions and savings goals with automatic calculations.",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
+    "start": "uvicorn app:app --reload",
+    "dev": "uvicorn app:app --reload",
     "test": "node --test"
   },
   "keywords": ["finance", "budget", "student", "planner", "money"],

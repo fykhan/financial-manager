@@ -153,20 +153,32 @@ export function openForm(collection, id = null) {
   if (delBtn) delBtn.addEventListener('click', async () => {
     const { confirmDialog } = await import('./ui.js');
     if (await confirmDialog('Delete?', `Remove “${escapeHtml(record.name || record.source)}”? This can't be undone.`)) {
-      store.remove(collection, id);
-      toast('Deleted', '');
-      closeModal();
+      delBtn.disabled = true;
+      try {
+        await store.remove(collection, id);
+        toast('Deleted', '');
+        closeModal();
+      } catch {
+        delBtn.disabled = false; // store.js already toasted the failure
+      }
     }
   });
 
-  form.addEventListener('submit', e => {
+  form.addEventListener('submit', async e => {
     e.preventDefault();
     const values = getValues();
     const err = validate(collection, values);
     if (err) { toast(err, 'err'); return; }
-    if (isEdit) { store.update(collection, id, values); toast('Saved', 'good'); }
-    else { store.add(collection, values); toast(`${titleCase(schema.title)} added`, 'good'); }
-    closeModal();
+
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      if (isEdit) { await store.update(collection, id, values); toast('Saved', 'good'); }
+      else { await store.add(collection, values); toast(`${titleCase(schema.title)} added`, 'good'); }
+      closeModal();
+    } catch {
+      submitBtn.disabled = false; // store.js already toasted the failure; keep typed input
+    }
   });
 }
 

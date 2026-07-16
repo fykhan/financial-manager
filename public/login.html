@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in · GradPlan</title>
+  <link rel="stylesheet" href="css/styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%92%B0%3C/text%3E%3C/svg%3E" />
+</head>
+<body>
+  <div class="auth-shell">
+    <div class="panel auth-card">
+      <div class="brand">
+        <span class="brand-mark">₲</span>
+        <div class="brand-text">
+          <strong>GradPlan</strong>
+          <small>Financial planner</small>
+        </div>
+      </div>
+      <p class="auth-error" id="auth-error"></p>
+      <form id="login-form">
+        <div class="field">
+          <label for="username">Username</label>
+          <input class="input" type="text" id="username" name="username" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label for="password">Password</label>
+          <input class="input" type="password" id="password" name="password" autocomplete="current-password" required />
+        </div>
+        <button class="btn btn-primary btn-block" type="submit" id="login-submit">Sign in</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast-host" id="toast-host" aria-live="polite"></div>
+
+  <script type="module" src="js/login.js"></script>
+</body>
+</html>

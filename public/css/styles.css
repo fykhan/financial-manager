@@ -63,6 +63,11 @@ body {
 /* ---------- Layout ---------- */
 .app { display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
 
+.auth-shell { display: grid; place-items: center; min-height: 100vh; padding: 20px; }
+.auth-card { width: 100%; max-width: 360px; }
+.auth-card .brand { padding: 0 0 20px; justify-content: center; }
+.auth-error { color: var(--critical); font-size: 13px; margin: 0 0 14px; min-height: 1em; }
+
 .sidebar {
   background: var(--sidebar);
   border-right: 1px solid var(--border);

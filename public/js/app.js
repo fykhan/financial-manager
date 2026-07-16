@@ -70,7 +70,7 @@ function initCurrency() {
 // ---------- data menu (import / export / reset) ----------
 function openDataMenu() {
   openModal('Your data', `
-    <p class="text-muted" style="margin-top:0;font-size:13.5px">Everything is stored privately in this browser. Back it up or move it to another device below.</p>
+    <p class="text-muted" style="margin-top:0;font-size:13.5px">Your data lives in your account on the server. Back it up or move it to another device below.</p>
     <div style="display:flex;flex-direction:column;gap:10px">
       <button class="btn btn-block" data-data="export-json">⬇ Export backup (JSON)</button>
       <button class="btn btn-block" data-data="export-csv">⬇ Export spreadsheet (CSV)</button>
@@ -99,11 +99,11 @@ function openDataMenu() {
       document.getElementById('import-file').click();
     } else if (act === 'sample') {
       if (await confirmDialog('Load sample data?', 'This replaces your current data with an example budget.', { okLabel: 'Load sample', danger: false })) {
-        store.loadSample(); toast('Sample data loaded', 'good'); render();
+        try { await store.loadSample(); toast('Sample data loaded', 'good'); closeModal(); render(); } catch { /* store.js already toasted */ }
       }
     } else if (act === 'reset') {
       if (await confirmDialog('Erase everything?', 'All your income, expenses, installments, subscriptions and goals will be permanently deleted.', { okLabel: 'Erase all' })) {
-        store.resetAll(); toast('All data erased', ''); render();
+        try { await store.resetAll(); toast('All data erased', ''); closeModal(); render(); } catch { /* store.js already toasted */ }
       }
     }
   });
@@ -112,16 +112,16 @@ function openDataMenu() {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
-        store.importJSON(reader.result);
+        await store.importJSON(reader.result);
         const sel = document.getElementById('currency-select');
         sel.value = store.getSettings().currency || 'USD';
         setCurrency(sel.value);
         toast('Backup imported', 'good');
         closeModal(); render();
-      } catch (err) {
-        toast('Could not import: ' + err.message, 'err');
+      } catch {
+        /* store.js already toasted the failure */
       }
     };
     reader.readAsText(file);
@@ -130,6 +130,12 @@ function openDataMenu() {
 
 // ---------- sidebar (mobile) ----------
 function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); }
+
+// ---------- logout ----------
+async function logout() {
+  try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); } catch { /* ignore */ }
+  location.href = '/login.html';
+}
 
 // ---------- global event delegation ----------
 function wire() {
@@ -144,6 +150,7 @@ function wire() {
 
   document.getElementById('btn-theme').addEventListener('click', toggleTheme);
   document.getElementById('btn-data').addEventListener('click', openDataMenu);
+  document.getElementById('btn-logout').addEventListener('click', logout);
   document.getElementById('menu-toggle').addEventListener('click', () => {
     document.getElementById('sidebar').classList.toggle('open');
   });
@@ -160,7 +167,7 @@ function wire() {
       const rec = store.getById(collection, id);
       const name = rec?.name || rec?.source || 'this item';
       if (await confirmDialog('Delete?', `Remove “${name}”? This can't be undone.`)) {
-        store.remove(collection, id); toast('Deleted', '');
+        try { await store.remove(collection, id); toast('Deleted', ''); } catch { /* store.js already toasted */ }
       }
     }
   });
@@ -176,11 +183,16 @@ function wire() {
 }
 
 // ---------- boot ----------
-function boot() {
+async function boot() {
   applyTheme(localStorage.getItem('gradplan.theme') || 'dark');
   initModalChrome();
-  initCurrency();
   wire();
+  try {
+    await store.init();
+  } catch {
+    return; // api.js already redirected to /login.html on 401
+  }
+  initCurrency();
   const hashView = location.hash.replace('#', '');
   current = RENDERERS[hashView] ? hashView : 'dashboard';
   render();

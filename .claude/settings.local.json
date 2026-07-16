@@ -2,7 +2,33 @@
   "permissions": {
     "allow": [
       "Bash(mkdir -p public)",
-      "Bash(git mv *)"
+      "Bash(git mv *)",
+      "Bash(./env/Scripts/python.exe -m pip install --disable-pip-version-check -q -r requirements.txt)",
+      "Bash(./env/Scripts/python.exe -c ' *)",
+      "Bash(./env/Scripts/python.exe -c \"import pydantic; print\\(pydantic.VERSION\\); from pydantic.alias_generators import to_camel; print\\(to_camel\\('term_months'\\)\\)\")",
+      "Bash(./env/Scripts/python.exe \"C:\\\\Users\\\\Dell\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Dell-Desktop-farhan-gradplan-financial-manager\\\\c9a2e489-e63d-4ecb-b6fc-6485a97fe6ae\\\\scratchpad\\\\smoke_test.py\")",
+      "Bash(PYTHONPATH=\"C:\\\\Users\\\\Dell\\\\Desktop\\\\farhan\\\\gradplan\\\\financial-manager\" ./env/Scripts/python.exe \"C:\\\\Users\\\\Dell\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Dell-Desktop-farhan-gradplan-financial-manager\\\\c9a2e489-e63d-4ecb-b6fc-6485a97fe6ae\\\\scratchpad\\\\smoke_test.py\")",
+      "Bash(npm test *)",
+      "Bash(export DATABASE_URL='sqlite:///C:/Users/Dell/AppData/Local/Temp/claude/C--Users-Dell-Desktop-farhan-gradplan-financial-manager/c9a2e489-e63d-4ecb-b6fc-6485a97fe6ae/scratchpad/test.db')",
+      "Bash(export AUTH_USERNAME='testuser')",
+      "Bash(export AUTH_PASSWORD_HASH='$argon2id$v=19$m=65536,t=3,p=4$Rkm/vHgg45vXxpXlNIK5RA$13Uj0TXvmOh6PLx3qXP1nNlV/JqIq/2iAftCmgz87J4')",
+      "Bash(export JWT_SECRET='this-is-a-local-smoke-test-secret-32b')",
+      "Bash(./env/Scripts/python.exe -m uvicorn app:app --port 4173)",
+      "Bash(rm -f \"C:\\\\Users\\\\Dell\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--Users-Dell-Desktop-farhan-gradplan-financial-manager\\\\c9a2e489-e63d-4ecb-b6fc-6485a97fe6ae\\\\scratchpad\\\\test.db\")",
+      "Bash(curl -s -o /dev/null -w \"boot: %{http_code}\\\\n\" http://127.0.0.1:4173/)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST http://127.0.0.1:4173/api/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"testuser\",\"password\":\"wrong\"}')",
+      "Bash(curl -s -c /tmp/cookies.txt -o /dev/null -w \"%{http_code}\\\\n\" -X POST http://127.0.0.1:4173/api/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"testuser\",\"password\":\"test-password-123\"}')",
+      "Bash(curl -s -b /tmp/cookies.txt http://127.0.0.1:4173/api/data)",
+      "Bash(curl -s -b /tmp/cookies.txt -X POST http://127.0.0.1:4173/api/data/sample -o /dev/null -w \"%{http_code}\\\\n\")",
+      "Bash(curl -s -b /tmp/cookies.txt -X POST http://127.0.0.1:4173/api/expenses -H \"Content-Type: application/json\" -d '{\"id\":\"id_e2e1\",\"name\":\"Coffee\",\"category\":\"Food\",\"amount\":5,\"frequency\":\"weekly\"}')",
+      "Bash(taskkill //F //IM python.exe //FI \"WINDOWTITLE eq *uvicorn*\")",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //PID 8404 //T)",
+      "Bash(taskkill //F //PID 1768 //T)",
+      "Bash(echo \"  env\\\\\\\\Scripts\\\\\\\\python scripts\\\\\\\\hash_password.py\")"
     ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-code-plugins": true
   }
 }
