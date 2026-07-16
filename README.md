@@ -94,4 +94,4 @@ Export backup** to keep a copy or move it to another device.
 ## 💱 Currency
 
 Pick your currency from the top bar (USD, EUR, GBP, INR, CAD, AUD, JPY, PKR, AED,
-SGD). The choice is saved and applied everywhere.
+SGD, HKD). The choice is saved and applied everywhere.

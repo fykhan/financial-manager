@@ -3,3 +3,8 @@ node_modules/
 *.log
 dist/
 .cache/
+CLAUDE.md
+.agents/
+skills-lock.json
+env/
+.venv/

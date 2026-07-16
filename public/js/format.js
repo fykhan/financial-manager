@@ -11,6 +11,7 @@ export const CURRENCIES = [
   { code: 'PKR', symbol: '₨', locale: 'en-PK' },
   { code: 'AED', symbol: 'د.إ', locale: 'ar-AE' },
   { code: 'SGD', symbol: '$', locale: 'en-SG' },
+  { code: 'HKD', symbol: '$', locale: 'zh-HK' },
 ];
 
 let _currency = 'USD';

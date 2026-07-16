@@ -5,7 +5,7 @@ import {
   toMonthly, toYearly, monthsBetween, addMonths, amortizedPayment,
   installmentStatus, goalStatus, summary, spendingByCategory,
   assessSavingsRate, assessDTI, daysUntil,
-} from '../js/calc.js';
+} from '../public/js/calc.js';
 
 const approx = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
 
