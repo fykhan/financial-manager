@@ -8,3 +8,7 @@ CLAUDE.md
 skills-lock.json
 env/
 .venv/
+.claude/
+.env
+.env.*
+!.env.example
