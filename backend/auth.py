@@ -25,6 +25,10 @@ REISSUE_AFTER = timedelta(days=1)
 THROTTLE_WINDOW = timedelta(minutes=15)
 THROTTLE_MAX_FAILURES = 10
 
+# Browsers refuse to store a Secure cookie over plain http://, which is what
+# local uvicorn serves. Vercel is HTTPS-only, so this is safe to gate on it.
+_SECURE_COOKIES = bool(os.getenv("VERCEL"))
+
 _hasher = PasswordHasher()
 
 
@@ -63,7 +67,7 @@ def set_session_cookie(response: Response, token: str) -> None:
         token,
         max_age=SESSION_DAYS * 24 * 3600,
         httponly=True,
-        secure=True,
+        secure=_SECURE_COOKIES,
         samesite="lax",
         path="/",
     )
