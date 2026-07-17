@@ -356,6 +356,9 @@ textarea.input { resize: vertical; min-height: 64px; }
   text-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
 }
 .panel .panel-sub { color: var(--muted); font-size: 12px; margin-bottom: 16px; letter-spacing: 0.04em; }
+.account-card { cursor: pointer; transition: transform 0.2s linear, box-shadow 0.2s linear, border-color 0.2s linear; }
+.account-card:hover { transform: translateY(-3px); box-shadow: var(--shadow), 0 0 24px rgba(0, 255, 255, 0.22); }
+.account-card.selected { border-color: var(--accent); box-shadow: var(--shadow), 0 0 18px rgba(255, 0, 255, 0.3); }
 
 /* ---------- Tables ---------- */
 .table-wrap {

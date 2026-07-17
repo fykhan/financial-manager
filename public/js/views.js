@@ -322,6 +322,11 @@ export function renderGoals(data) {
 }
 
 // ---------------- Accounts ----------------
+let accountFilter = null;
+/** Select (or toggle off, if already selected) an account to filter the ledger by. */
+export function setAccountFilter(id) { accountFilter = accountFilter === id ? null : id; }
+export function clearAccountFilter() { accountFilter = null; }
+
 export function renderAccounts(data) {
   const accounts = data.accounts || [];
   const transactions = data.transactions || [];
@@ -340,16 +345,25 @@ export function renderAccounts(data) {
   </div>`;
 
   const cards = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;margin:20px 0">
-    ${accounts.map(a => accountCard(a, transactions)).join('')}
+    ${accounts.map(a => accountCard(a, transactions, a.id === accountFilter)).join('')}
   </div>`;
 
-  const sorted = [...transactions].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const filtered = accountFilter
+    ? transactions.filter(t => t.accountId === accountFilter || t.toAccountId === accountFilter)
+    : transactions;
+  const sorted = [...filtered].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const filterChip = accountFilter ? `
+    <span class="badge cat">
+      Showing: ${escapeHtml(accountName(accountFilter))}
+      <button type="button" data-clear-account-filter title="Show all accounts" style="all:unset;cursor:pointer;margin-left:4px">✕</button>
+    </span>` : '';
 
   const ledger = `<div class="section">
-    <div class="section-head"><h2>Transactions</h2>
+    <div class="section-head">
+      <div class="flex center gap-8"><h2>Transactions</h2>${filterChip}</div>
       <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
     </div>
-    ${!sorted.length ? `<div class="text-muted" style="padding:12px 0">No transactions logged yet.</div>` : `
+    ${!sorted.length ? `<div class="text-muted" style="padding:12px 0">${accountFilter ? 'No transactions for this account yet.' : 'No transactions logged yet.'}</div>` : `
     <div class="table-wrap"><table class="data">
       <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Account</th><th class="num">Amount</th><th></th></tr></thead>
       <tbody>
@@ -376,12 +390,12 @@ function clickableStat(key, label, value, sub = '') {
   </button>`;
 }
 
-function accountCard(a, transactions) {
+function accountCard(a, transactions, selected = false) {
   const bal = accountBalance(a, transactions);
   const isCredit = a.type === 'credit';
   const limit = Number(a.creditLimit) || 0;
   const util = isCredit && limit > 0 ? bal / limit : 0;
-  return `<div class="panel">
+  return `<div class="panel account-card ${selected ? 'selected' : ''}" data-account-card="${a.id}" title="Click to show only this account's transactions">
     <div class="flex between center" style="margin-bottom:2px">
       <h3 style="margin:0">${escapeHtml(a.name)}</h3>
       ${rowActions('accounts', a.id)}

@@ -7,6 +7,7 @@ import { openForm } from './forms.js';
 import {
   viewTitle, renderDashboard, renderIncome, renderExpenses,
   renderInstallments, renderSubscriptions, renderGoals, renderAccounts,
+  setAccountFilter, clearAccountFilter,
 } from './views.js';
 
 const RENDERERS = {
@@ -37,6 +38,7 @@ function render() {
 
 function navigate(view) {
   if (!RENDERERS[view]) return;
+  clearAccountFilter();
   current = view;
   location.hash = view;
   render();
@@ -162,9 +164,13 @@ function wire() {
     const delBtn = e.target.closest('[data-del]');
     const addBtn = e.target.closest('[data-add]');
     const drillBtn = e.target.closest('[data-drill]');
+    const accountCard = e.target.closest('[data-account-card]');
+    const clearFilterBtn = e.target.closest('[data-clear-account-filter]');
     if (editBtn) return openForm(editBtn.dataset.edit, editBtn.dataset.id);
     if (addBtn) return openForm(addBtn.dataset.add);
     if (drillBtn) return toast('Detailed view coming soon', '');
+    if (clearFilterBtn) { clearAccountFilter(); return render(); }
+    if (accountCard) { setAccountFilter(accountCard.dataset.accountCard); return render(); }
     if (delBtn) {
       const { collection, id } = { collection: delBtn.dataset.del, id: delBtn.dataset.id };
       const rec = store.getById(collection, id);
@@ -181,7 +187,7 @@ function wire() {
   // Hash routing (back/forward + deep links)
   window.addEventListener('hashchange', () => {
     const v = location.hash.replace('#', '');
-    if (RENDERERS[v] && v !== current) { current = v; render(); }
+    if (RENDERERS[v] && v !== current) { clearAccountFilter(); current = v; render(); }
   });
 }
 
