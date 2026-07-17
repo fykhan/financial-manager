@@ -340,6 +340,7 @@ textarea.input { resize: vertical; min-height: 64px; }
 .stat-sub.pos { color: var(--good-text); text-shadow: 0 0 8px rgba(0, 255, 159, 0.4); }
 .stat-sub.neg { color: var(--critical); text-shadow: 0 0 8px rgba(255, 46, 99, 0.4); }
 .stat .dot { width: 9px; height: 9px; display: inline-block; box-shadow: 0 0 8px currentColor; }
+.stat-click { cursor: pointer; text-align: left; width: 100%; font: inherit; color: inherit; }
 
 /* ---------- Dashboard grid ---------- */
 .dash-grid { display: grid; grid-template-columns: 1.15fr 0.85fr; gap: 18px; margin-top: 18px; }

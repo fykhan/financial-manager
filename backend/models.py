@@ -86,6 +86,33 @@ class Goal(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+class Account(SQLModel, table=True):
+    __tablename__ = "accounts"
+
+    id: str = Field(primary_key=True)
+    name: str
+    type: str
+    balance: float = Field(default=0)
+    credit_limit: float | None = Field(default=None)
+    notes: str = Field(default="")
+    created_at: datetime = Field(default_factory=_now)
+
+
+class Transaction(SQLModel, table=True):
+    __tablename__ = "transactions"
+
+    id: str = Field(primary_key=True)
+    date: str
+    description: str
+    amount: float
+    type: str
+    category: str = Field(default="Other")
+    account_id: str | None = Field(default=None)
+    to_account_id: str | None = Field(default=None)
+    notes: str = Field(default="")
+    created_at: datetime = Field(default_factory=_now)
+
+
 class LoginAttempt(SQLModel, table=True):
     __tablename__ = "login_attempts"
 

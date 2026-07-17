@@ -4,8 +4,11 @@ from sqlmodel import Session, select
 from backend.auth import require_auth
 from backend.db import get_session
 from backend import seed
-from backend.models import Expense, Goal, Income, Installment, Settings, Subscription
+from backend.models import Account, Expense, Goal, Income, Installment, Settings, Subscription, Transaction
 from backend.schemas import (
+    AccountIn,
+    AccountOut,
+    AccountPatch,
     ExpenseIn,
     ExpenseOut,
     ExpensePatch,
@@ -24,6 +27,9 @@ from backend.schemas import (
     SubscriptionIn,
     SubscriptionOut,
     SubscriptionPatch,
+    TransactionIn,
+    TransactionOut,
+    TransactionPatch,
 )
 
 router = APIRouter(prefix="/api", tags=["data"], dependencies=[Depends(require_auth)])
@@ -35,6 +41,8 @@ COLLECTIONS = {
     "installments": (Installment, InstallmentIn, InstallmentOut, InstallmentPatch),
     "subscriptions": (Subscription, SubscriptionIn, SubscriptionOut, SubscriptionPatch),
     "goals": (Goal, GoalIn, GoalOut, GoalPatch),
+    "accounts": (Account, AccountIn, AccountOut, AccountPatch),
+    "transactions": (Transaction, TransactionIn, TransactionOut, TransactionPatch),
 }
 
 
@@ -57,11 +65,13 @@ def _snapshot(session: Session) -> FullData:
         installments=[InstallmentOut.model_validate(r) for r in session.exec(select(Installment)).all()],
         subscriptions=[SubscriptionOut.model_validate(r) for r in session.exec(select(Subscription)).all()],
         goals=[GoalOut.model_validate(r) for r in session.exec(select(Goal)).all()],
+        accounts=[AccountOut.model_validate(r) for r in session.exec(select(Account)).all()],
+        transactions=[TransactionOut.model_validate(r) for r in session.exec(select(Transaction)).all()],
     )
 
 
 def _wipe(session: Session) -> None:
-    for Model in (Income, Expense, Installment, Subscription, Goal):
+    for Model in (Income, Expense, Installment, Subscription, Goal, Transaction, Account):
         for row in session.exec(select(Model)).all():
             session.delete(row)
 
@@ -134,6 +144,8 @@ def import_data(body: dict, session: Session = Depends(get_session)):
     session.add_all(Installment(**r.model_dump(exclude={"created_at"})) for r in parsed.installments)
     session.add_all(Subscription(**r.model_dump(exclude={"created_at"})) for r in parsed.subscriptions)
     session.add_all(Goal(**r.model_dump(exclude={"created_at"})) for r in parsed.goals)
+    session.add_all(Account(**r.model_dump(exclude={"created_at"})) for r in parsed.accounts)
+    session.add_all(Transaction(**r.model_dump(exclude={"created_at"})) for r in parsed.transactions)
     session.commit()
     return _snapshot(session)
 

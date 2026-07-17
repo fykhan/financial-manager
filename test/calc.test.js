@@ -5,6 +5,7 @@ import {
   toMonthly, toYearly, monthsBetween, addMonths, amortizedPayment,
   installmentStatus, goalStatus, summary, spendingByCategory,
   assessSavingsRate, assessDTI, daysUntil,
+  accountBalance, accountsSummary, paymentsDueThisMonth,
 } from '../public/js/calc.js';
 
 const approx = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -150,4 +151,74 @@ test('daysUntil computes signed day distance', () => {
   assert.equal(daysUntil('2026-07-25', '2026-07-15'), 10);
   assert.equal(daysUntil('2026-07-10', '2026-07-15'), -5);
   assert.equal(daysUntil('', '2026-07-15'), null);
+});
+
+test('accountBalance applies expense/income against a depository account', () => {
+  const checking = { id: 'a1', type: 'checking', balance: 1000 };
+  const txns = [
+    { accountId: 'a1', type: 'expense', amount: 60 },
+    { accountId: 'a1', type: 'income', amount: 200 },
+    { accountId: 'other', type: 'expense', amount: 999 }, // unrelated, ignored
+  ];
+  approx(accountBalance(checking, txns), 1000 - 60 + 200);
+});
+
+test('accountBalance inverts sign for a credit account (charge increases owed)', () => {
+  const visa = { id: 'c1', type: 'credit', balance: 100 };
+  const txns = [{ accountId: 'c1', type: 'expense', amount: 50 }];
+  approx(accountBalance(visa, txns), 150);
+});
+
+test('accountBalance: a transfer paying off a credit card updates both sides', () => {
+  const checking = { id: 'a1', type: 'checking', balance: 1000 };
+  const visa = { id: 'c1', type: 'credit', balance: 340 };
+  const txns = [{ accountId: 'a1', toAccountId: 'c1', type: 'transfer', amount: 340 }];
+  approx(accountBalance(checking, txns), 1000 - 340);
+  approx(accountBalance(visa, txns), 0);
+});
+
+test('accountBalance: transfer between two depository accounts (wallet top-up)', () => {
+  const checking = { id: 'a1', type: 'checking', balance: 500 };
+  const wallet = { id: 'w1', type: 'wallet', balance: 20 };
+  const txns = [{ accountId: 'a1', toAccountId: 'w1', type: 'transfer', amount: 100 }];
+  approx(accountBalance(checking, txns), 400);
+  approx(accountBalance(wallet, txns), 120);
+});
+
+test('accountsSummary rolls up cash, credit owed, and available credit', () => {
+  const data = {
+    accounts: [
+      { id: 'a1', type: 'checking', balance: 1000 },
+      { id: 'w1', type: 'wallet', balance: 50 },
+      { id: 'c1', type: 'credit', balance: 200, creditLimit: 2000 },
+    ],
+    transactions: [
+      { accountId: 'c1', type: 'expense', amount: 100 }, // owed -> 300
+    ],
+  };
+  const s = accountsSummary(data);
+  approx(s.totalCash, 1050);
+  approx(s.totalCreditOwed, 300);
+  approx(s.totalCreditAvailable, 1700);
+  approx(s.netWorth, 1050 - 300);
+});
+
+test('paymentsDueThisMonth includes dated renewals, active installments, and monthly-or-more expenses', () => {
+  const data = {
+    subscriptions: [
+      { id: 's1', name: 'Spotify', amount: 11, nextRenewal: '2026-07-20' }, // this month
+      { id: 's2', name: 'Domain', amount: 12, nextRenewal: '2026-09-01' }, // not this month
+    ],
+    installments: [
+      { id: 'i1', name: 'Car', principal: 1200, monthlyPayment: 100, termMonths: 12, startDate: '2026-01-15', apr: 0 }, // active
+      { id: 'i2', name: 'Old loan', principal: 1200, monthlyPayment: 100, termMonths: 12, startDate: '2024-01-15', apr: 0 }, // finished
+    ],
+    expenses: [
+      { id: 'e1', name: 'Rent', amount: 1200, frequency: 'monthly' },
+      { id: 'e2', name: 'Insurance', amount: 300, frequency: 'quarterly' }, // excluded: no due date
+    ],
+  };
+  const due = paymentsDueThisMonth(data, '2026-07-15');
+  approx(due.total, 11 + 100 + 1200);
+  assert.equal(due.items.length, 3);
 });

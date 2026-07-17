@@ -27,7 +27,8 @@
       "Bash(taskkill //F //PID 1768 //T)",
       "Bash(echo \"  env\\\\\\\\Scripts\\\\\\\\python scripts\\\\\\\\hash_password.py\")",
       "Bash(curl -s -i -X POST http://127.0.0.1:4173/api/auth/login -H \"Content-Type: application/json\" -d '{\"username\":\"farhanyk\",\"password\":\"probe-wrong\"}')",
-      "Bash(grep -E \"\\\\.env$|\\\\.env\\\\.|__pycache__|\\\\.pyc$\")"
+      "Bash(grep -E \"\\\\.env$|\\\\.env\\\\.|__pycache__|\\\\.pyc$\")",
+      "Bash(node --test test/calc.test.js)"
     ]
   },
   "enabledPlugins": {

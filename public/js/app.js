@@ -6,7 +6,7 @@ import { initModalChrome, openModal, closeModal, toast, confirmDialog, download 
 import { openForm } from './forms.js';
 import {
   viewTitle, renderDashboard, renderIncome, renderExpenses,
-  renderInstallments, renderSubscriptions, renderGoals,
+  renderInstallments, renderSubscriptions, renderGoals, renderAccounts,
 } from './views.js';
 
 const RENDERERS = {
@@ -16,6 +16,7 @@ const RENDERERS = {
   installments: renderInstallments,
   subscriptions: renderSubscriptions,
   goals: renderGoals,
+  accounts: renderAccounts,
 };
 
 let current = 'dashboard';
@@ -160,12 +161,14 @@ function wire() {
     const editBtn = e.target.closest('[data-edit]');
     const delBtn = e.target.closest('[data-del]');
     const addBtn = e.target.closest('[data-add]');
+    const drillBtn = e.target.closest('[data-drill]');
     if (editBtn) return openForm(editBtn.dataset.edit, editBtn.dataset.id);
     if (addBtn) return openForm(addBtn.dataset.add);
+    if (drillBtn) return toast('Detailed view coming soon', '');
     if (delBtn) {
       const { collection, id } = { collection: delBtn.dataset.del, id: delBtn.dataset.id };
       const rec = store.getById(collection, id);
-      const name = rec?.name || rec?.source || 'this item';
+      const name = rec?.name || rec?.source || rec?.description || 'this item';
       if (await confirmDialog('Delete?', `Remove “${name}”? This can't be undone.`)) {
         try { await store.remove(collection, id); toast('Deleted', ''); } catch { /* store.js already toasted */ }
       }

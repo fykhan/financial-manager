@@ -3,6 +3,7 @@
 import {
   summary, spendingByCategory, installmentStatus, goalStatus,
   toMonthly, FREQ_LABELS, assessSavingsRate, assessDTI, daysUntil,
+  accountBalance, accountsSummary, paymentsDueThisMonth,
 } from './calc.js';
 import { donut, compareBars, progressBar, seriesColor } from './charts.js';
 import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, titleCase } from './format.js';
@@ -10,6 +11,7 @@ import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, title
 const VIEW_TITLES = {
   dashboard: 'Dashboard', income: 'Income', expenses: 'Expenses',
   installments: 'Installments', subscriptions: 'Subscriptions', goals: 'Savings goals',
+  accounts: 'Accounts',
 };
 export function viewTitle(v) { return VIEW_TITLES[v] || 'GradPlan'; }
 
@@ -92,7 +94,22 @@ export function renderDashboard(data) {
     </div>
   </div>`;
 
-  return `${tiles}${panels}${health}${upcoming}`;
+  const accountsRow = accountsOverviewRow(data);
+
+  return `${tiles}${panels}${health}${accountsRow}${upcoming}`;
+}
+
+function accountsOverviewRow(data) {
+  if (!(data.accounts || []).length) return '';
+  const acc = accountsSummary(data);
+  const due = paymentsDueThisMonth(data);
+  return `<div class="section" style="margin-top:24px">
+    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+      ${statTile({ label: 'Total cash', value: money(acc.totalCash) })}
+      ${statTile({ label: 'Total credit due', value: money(acc.totalCreditOwed) })}
+      ${statTile({ label: 'Due this month', value: money(due.total), sub: `${due.items.length} payment${due.items.length === 1 ? '' : 's'}` })}
+    </div>
+  </div>`;
 }
 
 function miniRow(label, value) {
@@ -293,6 +310,82 @@ export function renderGoals(data) {
         </div>`;
       }).join('')}
     </div>`;
+}
+
+// ---------------- Accounts ----------------
+export function renderAccounts(data) {
+  const accounts = data.accounts || [];
+  const transactions = data.transactions || [];
+  if (!accounts.length) return empty('◈', 'No accounts yet', 'Add a bank account, wallet or credit card to start tracking balances.', 'accounts');
+
+  const s = accountsSummary(data);
+  const due = paymentsDueThisMonth(data);
+  const accountName = id => accounts.find(a => a.id === id)?.name || '—';
+
+  const tiles = `<div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+    ${clickableStat('cash', 'Total cash', money(s.totalCash))}
+    ${clickableStat('credit', 'Total credit due', money(s.totalCreditOwed), s.totalCreditAvailable > 0 ? `${money(s.totalCreditAvailable)} available` : '')}
+    ${clickableStat('due', 'Due this month', money(due.total), `${due.items.length} payment${due.items.length === 1 ? '' : 's'}`)}
+  </div>`;
+
+  const cards = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;margin:20px 0">
+    ${accounts.map(a => accountCard(a, transactions)).join('')}
+  </div>`;
+
+  const sorted = [...transactions].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  const ledger = `<div class="section">
+    <div class="section-head"><h2>Transactions</h2>
+      <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
+    </div>
+    ${!sorted.length ? `<div class="text-muted" style="padding:12px 0">No transactions logged yet.</div>` : `
+    <div class="table-wrap"><table class="data">
+      <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Account</th><th class="num">Amount</th><th></th></tr></thead>
+      <tbody>
+        ${sorted.map(t => `<tr>
+          <td class="cell-muted">${dateLabel(t.date)}</td>
+          <td class="cell-strong">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
+          <td><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
+          <td>${t.type === 'transfer' ? `${escapeHtml(accountName(t.accountId))} → ${escapeHtml(accountName(t.toAccountId))}` : escapeHtml(accountName(t.accountId))}</td>
+          <td class="num ${t.type === 'income' ? 'text-good' : t.type === 'expense' ? 'text-crit' : ''}">${t.type === 'expense' ? '−' : t.type === 'income' ? '+' : ''}${money(t.amount)}</td>
+          <td>${rowActions('transactions', t.id)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`}
+  </div>`;
+
+  return `${tiles}${cards}${ledger}`;
+}
+
+function clickableStat(key, label, value, sub = '') {
+  return `<button class="stat stat-click" type="button" data-drill="${key}">
+    <div class="stat-label">${label}</div>
+    <div class="stat-value tabular">${value}</div>
+    ${sub ? `<div class="stat-sub">${sub}</div>` : ''}
+  </button>`;
+}
+
+function accountCard(a, transactions) {
+  const bal = accountBalance(a, transactions);
+  const isCredit = a.type === 'credit';
+  const limit = Number(a.creditLimit) || 0;
+  const util = isCredit && limit > 0 ? bal / limit : 0;
+  return `<div class="panel">
+    <div class="flex between center" style="margin-bottom:2px">
+      <h3 style="margin:0">${escapeHtml(a.name)}</h3>
+      ${rowActions('accounts', a.id)}
+    </div>
+    <div class="panel-sub">${titleCase(a.type)}</div>
+    ${isCredit ? `
+      <div class="flex between" style="margin-top:12px;font-size:13px"><span class="text-muted">Owed</span><span class="cell-strong">${money(bal)}</span></div>
+      ${limit > 0 ? `
+        ${progressBar(util, { good: util < 0.5 })}
+        <div class="flex between" style="margin-top:6px;font-size:13px"><span class="text-muted">Available</span><span>${money(Math.max(0, limit - bal))} of ${money(limit)}</span></div>
+      ` : ''}
+    ` : `
+      <div class="stat-value tabular" style="margin-top:8px">${money(bal)}</div>
+    `}
+  </div>`;
 }
 
 function summaryStrip(items) {

@@ -246,3 +246,97 @@ export function assessDTI(dti) {
   if (dti <= 0.43) return { level: 'serious', label: 'Elevated' };
   return { level: 'critical', label: 'High' };
 }
+
+/**
+ * Cash-flow effect of one transaction on a given account, from the account's
+ * own point of view (ignoring credit-vs-depository sign flip — see
+ * accountBalance). Expense/income only count against their own accountId;
+ * transfers count against both sides.
+ */
+function literalDelta(t, accountId) {
+  const amt = Number(t.amount) || 0;
+  if (t.type === 'transfer') {
+    if (t.accountId === accountId) return -amt;
+    if (t.toAccountId === accountId) return amt;
+    return 0;
+  }
+  if (t.accountId !== accountId) return 0;
+  if (t.type === 'income') return amt;
+  if (t.type === 'expense') return -amt;
+  return 0;
+}
+
+/**
+ * Derived current balance for one account: its opening `balance` plus every
+ * transaction that touches it. For a credit account `balance` means "amount
+ * owed", so the literal cash delta is inverted — a charge (money "out")
+ * increases what's owed, and a payment/transfer in reduces it.
+ */
+export function accountBalance(account, transactions) {
+  const isCredit = account.type === 'credit';
+  const delta = (transactions || []).reduce((s, t) => s + literalDelta(t, account.id), 0);
+  return (Number(account.balance) || 0) + (isCredit ? -delta : delta);
+}
+
+/** Roll every account into cash-on-hand / credit-owed / credit-available / net worth. */
+export function accountsSummary(data) {
+  const accounts = data.accounts || [];
+  const transactions = data.transactions || [];
+  let totalCash = 0, totalCreditOwed = 0, totalCreditLimit = 0;
+  accounts.forEach(a => {
+    const bal = accountBalance(a, transactions);
+    if (a.type === 'credit') {
+      totalCreditOwed += bal;
+      totalCreditLimit += Number(a.creditLimit) || 0;
+    } else {
+      totalCash += bal;
+    }
+  });
+  return {
+    totalCash,
+    totalCreditOwed,
+    totalCreditAvailable: Math.max(0, totalCreditLimit - totalCreditOwed),
+    netWorth: totalCash - totalCreditOwed,
+  };
+}
+
+/**
+ * Recurring obligations landing inside the current calendar month: dated
+ * subscription renewals, active installment payments (due every month
+ * they're active), and expenses that recur monthly or more often. Expenses
+ * billed less than monthly (quarterly/semiannually/annually) have no due
+ * date on this record type, so they're left out rather than guessed at.
+ */
+export function paymentsDueThisMonth(data, refISO) {
+  const ref = refISO ? new Date(refISO + 'T00:00:00') : new Date();
+  const y = ref.getFullYear(), m = ref.getMonth();
+  const inThisMonth = iso => {
+    if (!iso) return false;
+    const d = new Date(iso + 'T00:00:00');
+    return !isNaN(d) && d.getFullYear() === y && d.getMonth() === m;
+  };
+
+  const items = [];
+
+  (data.subscriptions || []).forEach(s => {
+    if (inThisMonth(s.nextRenewal)) {
+      items.push({ kind: 'subscription', id: s.id, name: s.name, amount: Number(s.amount) || 0, date: s.nextRenewal });
+    }
+  });
+
+  (data.installments || []).forEach(it => {
+    const st = installmentStatus(it, refISO);
+    if (st.active) {
+      items.push({ kind: 'installment', id: it.id, name: it.name, amount: st.monthlyPayment, date: null });
+    }
+  });
+
+  (data.expenses || []).forEach(e => {
+    const per = FREQ_PER_YEAR[e.frequency] || 0;
+    if (per >= 12) {
+      items.push({ kind: 'expense', id: e.id, name: e.name, amount: toMonthly(e.amount, e.frequency), date: null });
+    }
+  });
+
+  return { items, total: items.reduce((s, i) => s + i.amount, 0) };
+}

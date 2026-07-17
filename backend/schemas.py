@@ -165,6 +165,66 @@ class GoalPatch(CamelModel):
     _blank_deadline = field_validator("deadline", mode="before")(_blank_to_none)
 
 
+# ---- accounts ----
+
+class AccountIn(CamelModel):
+    id: str
+    name: str
+    type: str
+    balance: float = 0
+    credit_limit: float | None = None
+    notes: str = ""
+
+    _blank_limit = field_validator("credit_limit", mode="before")(_blank_to_none)
+
+
+class AccountOut(AccountIn):
+    created_at: datetime
+
+
+class AccountPatch(CamelModel):
+    name: str | None = None
+    type: str | None = None
+    balance: float | None = None
+    credit_limit: float | None = None
+    notes: str | None = None
+
+    _blank_limit = field_validator("credit_limit", mode="before")(_blank_to_none)
+
+
+# ---- transactions ----
+
+class TransactionIn(CamelModel):
+    id: str
+    date: str
+    description: str
+    amount: float
+    type: str
+    category: str = "Other"
+    account_id: str | None = None
+    to_account_id: str | None = None
+    notes: str = ""
+
+    _blank_accounts = field_validator("account_id", "to_account_id", mode="before")(_blank_to_none)
+
+
+class TransactionOut(TransactionIn):
+    created_at: datetime
+
+
+class TransactionPatch(CamelModel):
+    date: str | None = None
+    description: str | None = None
+    amount: float | None = None
+    type: str | None = None
+    category: str | None = None
+    account_id: str | None = None
+    to_account_id: str | None = None
+    notes: str | None = None
+
+    _blank_accounts = field_validator("account_id", "to_account_id", mode="before")(_blank_to_none)
+
+
 class FullData(CamelModel):
     version: int = 1
     settings: SettingsOut = Field(default_factory=lambda: SettingsOut(currency="USD", name=""))
@@ -173,3 +233,5 @@ class FullData(CamelModel):
     installments: list[InstallmentOut] = Field(default_factory=list)
     subscriptions: list[SubscriptionOut] = Field(default_factory=list)
     goals: list[GoalOut] = Field(default_factory=list)
+    accounts: list[AccountOut] = Field(default_factory=list)
+    transactions: list[TransactionOut] = Field(default_factory=list)

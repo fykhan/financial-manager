@@ -11,6 +11,12 @@ const SUB_CYCLES = ['weekly', 'monthly', 'quarterly', 'semiannually', 'annually'
 const EXPENSE_CATEGORIES = ['Housing', 'Food', 'Transport', 'Health', 'Bills', 'Education', 'Entertainment', 'Shopping', 'Personal', 'Savings', 'Other'];
 const SUB_CATEGORIES = ['Entertainment', 'Software', 'Health', 'News', 'Music', 'Cloud', 'Other'];
 
+const ACCOUNT_TYPES = ['checking', 'savings', 'cash', 'wallet', 'credit'];
+const TXN_TYPES = ['expense', 'income', 'transfer'];
+const TXN_CATEGORIES = ['Housing', 'Food', 'Transport', 'Health', 'Bills', 'Education', 'Entertainment', 'Shopping', 'Personal', 'Savings', 'Income', 'Transfer', 'Other'];
+
+const accountOptions = () => store.getData().accounts.map(a => ({ value: a.id, label: `${a.name} (${titleCase(a.type)})` }));
+
 // Field schema per collection. Each field: { name, label, type, options?, required?, step?, hint?, half? }
 const SCHEMAS = {
   income: {
@@ -69,17 +75,53 @@ const SCHEMAS = {
     ],
     preview: previewGoal,
   },
+  accounts: {
+    title: 'account',
+    fields: [
+      { name: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Checking, GCash, Visa' },
+      { name: 'type', label: 'Type', type: 'select', options: ACCOUNT_TYPES, def: 'checking', half: true },
+      { name: 'balance', label: 'Current balance', type: 'number', required: true, step: '0.01', def: 0, half: true, hint: 'For a credit card, enter the amount currently owed' },
+      { name: 'creditLimit', label: 'Credit limit', type: 'number', step: '0.01', hint: 'Credit cards only — leave blank otherwise' },
+      { name: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+  },
+  transactions: {
+    title: 'transaction',
+    fields: [
+      { name: 'date', label: 'Date', type: 'date', required: true, def: todayISO(), half: true },
+      { name: 'type', label: 'Type', type: 'select', options: TXN_TYPES, def: 'expense', half: true },
+      { name: 'description', label: 'Description', type: 'text', required: true, placeholder: 'e.g. Groceries, Salary, Pay off Visa' },
+      { name: 'amount', label: 'Amount', type: 'number', required: true, step: '0.01', half: true },
+      { name: 'category', label: 'Category', type: 'select', options: TXN_CATEGORIES, def: 'Other', half: true },
+      { name: 'accountId', label: 'Account', type: 'select', options: accountOptions, required: true, half: true },
+      { name: 'toAccountId', label: 'To account', type: 'select', options: accountOptions, half: true, hint: 'Transfers only', visibleIf: v => v.type === 'transfer' },
+      { name: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+    validate: v => {
+      if (v.type === 'transfer') {
+        if (!v.toAccountId) return 'To account is required for transfers';
+        if (v.accountId && v.accountId === v.toAccountId) return 'From and to accounts must be different';
+      }
+      return null;
+    },
+  },
 };
 
 export function labelOf(collection) { return SCHEMAS[collection].title; }
+
+function resolveOptions(f) {
+  const opts = typeof f.options === 'function' ? f.options() : f.options;
+  return opts.map(o => (typeof o === 'object' ? o : { value: o, label: FREQ_LABELS[o] || titleCase(o) }));
+}
 
 function fieldHtml(f, value) {
   const val = value ?? f.def ?? '';
   const req = f.required ? 'required' : '';
   let control;
   if (f.type === 'select') {
+    const opts = resolveOptions(f);
     control = `<select class="input" name="${f.name}" ${req}>
-      ${f.options.map(o => `<option value="${o}" ${String(val) === o ? 'selected' : ''}>${escapeHtml(FREQ_LABELS[o] || titleCase(o))}</option>`).join('')}
+      ${opts.map(o => `<option value="${escapeHtml(o.value)}" ${String(val) === o.value ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}
     </select>`;
   } else if (f.type === 'textarea') {
     control = `<textarea class="input" name="${f.name}" placeholder="${f.placeholder || ''}">${escapeHtml(val)}</textarea>`;
@@ -88,7 +130,7 @@ function fieldHtml(f, value) {
     control = `<input class="input" type="${f.type}" name="${f.name}" value="${escapeHtml(val)}"
       placeholder="${f.placeholder || ''}" ${extra} ${req} />`;
   }
-  return `<div class="field ${f.half ? 'half' : ''}">
+  return `<div class="field ${f.half ? 'half' : ''}" data-field-wrap="${f.name}">
     <label>${f.label}${f.required ? ' *' : ''}</label>
     ${control}
     ${f.hint ? `<div class="field-hint">${f.hint}</div>` : ''}
@@ -148,11 +190,25 @@ export function openForm(collection, id = null) {
   const refresh = () => { if (schema.preview && previewEl) previewEl.innerHTML = schema.preview(getValues()); };
   if (schema.preview) { refresh(); form.addEventListener('input', refresh); }
 
+  // Conditionally-visible fields (e.g. "to account" only for transfers).
+  const applyVisibility = () => {
+    const values = getValues();
+    schema.fields.forEach(f => {
+      if (!f.visibleIf) return;
+      const wrap = form.querySelector(`[data-field-wrap="${f.name}"]`);
+      if (!wrap) return;
+      const show = f.visibleIf(values);
+      wrap.hidden = !show;
+      wrap.querySelectorAll('input,select,textarea').forEach(inp => { inp.disabled = !show; });
+    });
+  };
+  if (schema.fields.some(f => f.visibleIf)) { applyVisibility(); form.addEventListener('input', applyVisibility); }
+
   form.querySelector('[data-act="cancel"]').addEventListener('click', closeModal);
   const delBtn = form.querySelector('[data-act="delete"]');
   if (delBtn) delBtn.addEventListener('click', async () => {
     const { confirmDialog } = await import('./ui.js');
-    if (await confirmDialog('Delete?', `Remove “${escapeHtml(record.name || record.source)}”? This can't be undone.`)) {
+    if (await confirmDialog('Delete?', `Remove “${escapeHtml(record.name || record.source || record.description || 'this item')}”? This can't be undone.`)) {
       delBtn.disabled = true;
       try {
         await store.remove(collection, id);
@@ -191,7 +247,7 @@ function validate(collection, v) {
   for (const key of amountFields) {
     if (key in v && v[key] !== '' && Number(v[key]) < 0) return `${key} can't be negative`;
   }
-  return null;
+  return schema.validate ? schema.validate(v) : null;
 }
 
 // ---- live preview renderers ----
