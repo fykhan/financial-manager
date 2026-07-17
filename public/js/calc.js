@@ -300,26 +300,27 @@ export function accountsSummary(data) {
   };
 }
 
+/** Does an ISO date fall in the same calendar month as refISO (default now)? */
+function inCalendarMonth(iso, refISO) {
+  if (!iso) return false;
+  const ref = refISO ? new Date(refISO + 'T00:00:00') : new Date();
+  const d = new Date(iso + 'T00:00:00');
+  return !isNaN(d) && d.getFullYear() === ref.getFullYear() && d.getMonth() === ref.getMonth();
+}
+
 /**
  * Recurring obligations landing inside the current calendar month: dated
  * subscription renewals, active installment payments (due every month
- * they're active), and expenses that recur monthly or more often. Expenses
- * billed less than monthly (quarterly/semiannually/annually) have no due
- * date on this record type, so they're left out rather than guessed at.
+ * they're active), and expenses that recur monthly or more often. An expense
+ * with an auto-pay `nextDate` uses that date directly; one without any date
+ * on record falls back to "monthly-or-more-frequent counts as due" since
+ * there's nothing more precise to anchor it to.
  */
 export function paymentsDueThisMonth(data, refISO) {
-  const ref = refISO ? new Date(refISO + 'T00:00:00') : new Date();
-  const y = ref.getFullYear(), m = ref.getMonth();
-  const inThisMonth = iso => {
-    if (!iso) return false;
-    const d = new Date(iso + 'T00:00:00');
-    return !isNaN(d) && d.getFullYear() === y && d.getMonth() === m;
-  };
-
   const items = [];
 
   (data.subscriptions || []).forEach(s => {
-    if (inThisMonth(s.nextRenewal)) {
+    if (inCalendarMonth(s.nextRenewal, refISO)) {
       items.push({ kind: 'subscription', id: s.id, name: s.name, amount: Number(s.amount) || 0, date: s.nextRenewal });
     }
   });
@@ -332,9 +333,39 @@ export function paymentsDueThisMonth(data, refISO) {
   });
 
   (data.expenses || []).forEach(e => {
+    if (e.nextDate) {
+      if (inCalendarMonth(e.nextDate, refISO)) {
+        items.push({ kind: 'expense', id: e.id, name: e.name, amount: Number(e.amount) || 0, date: e.nextDate });
+      }
+      return;
+    }
     const per = FREQ_PER_YEAR[e.frequency] || 0;
     if (per >= 12) {
       items.push({ kind: 'expense', id: e.id, name: e.name, amount: toMonthly(e.amount, e.frequency), date: null });
+    }
+  });
+
+  return { items, total: items.reduce((s, i) => s + i.amount, 0) };
+}
+
+/**
+ * Income landing inside the current calendar month — the incoming-money
+ * counterpart to paymentsDueThisMonth. Same auto-pay-date-first, frequency-
+ * fallback rule as expenses.
+ */
+export function incomeDueThisMonth(data, refISO) {
+  const items = [];
+
+  (data.income || []).forEach(i => {
+    if (i.nextDate) {
+      if (inCalendarMonth(i.nextDate, refISO)) {
+        items.push({ kind: 'income', id: i.id, name: i.source, amount: Number(i.amount) || 0, date: i.nextDate });
+      }
+      return;
+    }
+    const per = FREQ_PER_YEAR[i.frequency] || 0;
+    if (per >= 12) {
+      items.push({ kind: 'income', id: i.id, name: i.source, amount: toMonthly(i.amount, i.frequency), date: null });
     }
   });
 

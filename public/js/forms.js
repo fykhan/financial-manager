@@ -16,6 +16,7 @@ const TXN_TYPES = ['expense', 'income', 'transfer'];
 const TXN_CATEGORIES = ['Housing', 'Food', 'Transport', 'Health', 'Bills', 'Education', 'Entertainment', 'Shopping', 'Personal', 'Savings', 'Income', 'Transfer', 'Other'];
 
 const accountOptions = () => store.getData().accounts.map(a => ({ value: a.id, label: `${a.name} (${titleCase(a.type)})` }));
+const accountOptionsOptional = () => [{ value: '', label: '— none (forecast only) —' }, ...accountOptions()];
 
 // Field schema per collection. Each field: { name, label, type, options?, required?, step?, hint?, half? }
 const SCHEMAS = {
@@ -26,8 +27,14 @@ const SCHEMAS = {
       { name: 'amount', label: 'Amount', type: 'number', required: true, step: '0.01', half: true },
       { name: 'frequency', label: 'How often', type: 'select', options: FREQ_OPTIONS, def: 'monthly', half: true },
       { name: 'type', label: 'Type', type: 'select', options: ['net', 'gross'], def: 'net', hint: 'Net = take-home after tax' },
+      { name: 'accountId', label: 'Auto-deposit to account', type: 'select', options: accountOptionsOptional, half: true, hint: 'Optional — posts automatically when due' },
+      { name: 'nextDate', label: 'Next payment date', type: 'date', def: todayISO(), half: true, visibleIf: v => !!v.accountId },
       { name: 'notes', label: 'Notes', type: 'textarea' },
     ],
+    validate: v => {
+      if (v.accountId && !v.nextDate) return 'Next payment date is required to auto-deposit this income';
+      return null;
+    },
   },
   expenses: {
     title: 'expense',
@@ -35,9 +42,15 @@ const SCHEMAS = {
       { name: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Rent, Groceries' },
       { name: 'category', label: 'Category', type: 'select', options: EXPENSE_CATEGORIES, def: 'Housing', half: true },
       { name: 'amount', label: 'Amount', type: 'number', required: true, step: '0.01', half: true },
-      { name: 'frequency', label: 'How often', type: 'select', options: FREQ_OPTIONS, def: 'monthly' },
+      { name: 'frequency', label: 'How often', type: 'select', options: FREQ_OPTIONS, def: 'monthly', half: true },
+      { name: 'accountId', label: 'Auto-pay from account', type: 'select', options: accountOptionsOptional, half: true, hint: 'Optional — posts automatically when due' },
+      { name: 'nextDate', label: 'Next due date', type: 'date', def: todayISO(), half: true, visibleIf: v => !!v.accountId },
       { name: 'notes', label: 'Notes', type: 'textarea' },
     ],
+    validate: v => {
+      if (v.accountId && !v.nextDate) return 'Next due date is required to auto-pay this expense';
+      return null;
+    },
   },
   subscriptions: {
     title: 'subscription',
@@ -47,8 +60,13 @@ const SCHEMAS = {
       { name: 'cycle', label: 'Billing cycle', type: 'select', options: SUB_CYCLES, def: 'monthly', half: true },
       { name: 'category', label: 'Category', type: 'select', options: SUB_CATEGORIES, def: 'Entertainment', half: true },
       { name: 'nextRenewal', label: 'Next renewal', type: 'date', half: true },
+      { name: 'accountId', label: 'Auto-pay from account', type: 'select', options: accountOptionsOptional, half: true, hint: 'Optional — posts automatically at renewal' },
       { name: 'notes', label: 'Notes', type: 'textarea' },
     ],
+    validate: v => {
+      if (v.accountId && !v.nextRenewal) return 'Next renewal date is required to auto-pay this subscription';
+      return null;
+    },
   },
   installments: {
     title: 'installment / loan',
@@ -59,9 +77,15 @@ const SCHEMAS = {
       { name: 'termMonths', label: 'Term (months)', type: 'number', required: true, step: '1', half: true },
       { name: 'monthlyPayment', label: 'Monthly payment', type: 'number', step: '0.01', half: true, hint: 'Leave blank to auto-calc' },
       { name: 'startDate', label: 'Start date', type: 'date', def: todayISO(), half: true },
+      { name: 'accountId', label: 'Auto-pay from account', type: 'select', options: accountOptionsOptional, half: true, hint: 'Optional — posts automatically when due' },
+      { name: 'nextDueDate', label: 'Next payment date', type: 'date', def: todayISO(), half: true, visibleIf: v => !!v.accountId },
       { name: 'notes', label: 'Notes', type: 'textarea' },
     ],
     preview: previewInstallment,
+    validate: v => {
+      if (v.accountId && !v.nextDueDate) return 'Next payment date is required to auto-pay this installment';
+      return null;
+    },
   },
   goals: {
     title: 'savings goal',
@@ -80,8 +104,8 @@ const SCHEMAS = {
     fields: [
       { name: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Checking, GCash, Visa' },
       { name: 'type', label: 'Type', type: 'select', options: ACCOUNT_TYPES, def: 'checking', half: true },
-      { name: 'balance', label: 'Current balance', type: 'number', required: true, step: '0.01', def: 0, half: true, hint: 'For a credit card, enter the amount currently owed' },
-      { name: 'creditLimit', label: 'Credit limit', type: 'number', step: '0.01', hint: 'Credit cards only — leave blank otherwise' },
+      { name: 'balance', label: 'Current balance', type: 'number', required: true, step: '0.01', def: 0, half: true, hint: 'Credit card? Enter the amount currently owed.' },
+      { name: 'creditLimit', label: 'Credit limit', type: 'number', step: '0.01', hint: 'The most this card can carry', visibleIf: v => v.type === 'credit' },
       { name: 'notes', label: 'Notes', type: 'textarea' },
     ],
   },

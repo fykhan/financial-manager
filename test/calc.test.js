@@ -5,7 +5,7 @@ import {
   toMonthly, toYearly, monthsBetween, addMonths, amortizedPayment,
   installmentStatus, goalStatus, summary, spendingByCategory,
   assessSavingsRate, assessDTI, daysUntil,
-  accountBalance, accountsSummary, paymentsDueThisMonth,
+  accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
 } from '../public/js/calc.js';
 
 const approx = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -221,4 +221,30 @@ test('paymentsDueThisMonth includes dated renewals, active installments, and mon
   const due = paymentsDueThisMonth(data, '2026-07-15');
   approx(due.total, 11 + 100 + 1200);
   assert.equal(due.items.length, 3);
+});
+
+test('paymentsDueThisMonth prefers an auto-pay nextDate over the frequency fallback', () => {
+  const data = {
+    expenses: [
+      { id: 'e1', name: 'Rent', amount: 1200, frequency: 'monthly', nextDate: '2026-07-20' }, // this month, dated
+      { id: 'e2', name: 'Car payment', amount: 400, frequency: 'monthly', nextDate: '2026-08-01' }, // dated, but next month -> excluded
+      { id: 'e3', name: 'Phone', amount: 40, frequency: 'monthly' }, // no date -> fallback include
+    ],
+  };
+  const due = paymentsDueThisMonth(data, '2026-07-15');
+  approx(due.total, 1200 + 40);
+  assert.equal(due.items.length, 2);
+});
+
+test('incomeDueThisMonth mirrors paymentsDueThisMonth for income records', () => {
+  const data = {
+    income: [
+      { id: 'i1', source: 'Salary', amount: 3800, frequency: 'monthly', nextDate: '2026-07-25' }, // this month
+      { id: 'i2', source: 'Bonus', amount: 500, frequency: 'annually', nextDate: '2026-12-01' }, // dated, other month -> excluded
+      { id: 'i3', source: 'Freelance', amount: 450, frequency: 'monthly' }, // no date -> fallback include
+    ],
+  };
+  const due = incomeDueThisMonth(data, '2026-07-15');
+  approx(due.total, 3800 + 450);
+  assert.equal(due.items.length, 2);
 });

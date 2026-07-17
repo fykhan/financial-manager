@@ -39,6 +39,10 @@ class IncomeIn(CamelModel):
     frequency: str
     type: str = "net"
     notes: str = ""
+    account_id: str | None = None
+    next_date: str | None = None
+
+    _blank_auto_pay = field_validator("account_id", "next_date", mode="before")(_blank_to_none)
 
 
 class IncomeOut(IncomeIn):
@@ -51,6 +55,10 @@ class IncomePatch(CamelModel):
     frequency: str | None = None
     type: str | None = None
     notes: str | None = None
+    account_id: str | None = None
+    next_date: str | None = None
+
+    _blank_auto_pay = field_validator("account_id", "next_date", mode="before")(_blank_to_none)
 
 
 # ---- expenses ----
@@ -62,6 +70,10 @@ class ExpenseIn(CamelModel):
     amount: float
     frequency: str
     notes: str = ""
+    account_id: str | None = None
+    next_date: str | None = None
+
+    _blank_auto_pay = field_validator("account_id", "next_date", mode="before")(_blank_to_none)
 
 
 class ExpenseOut(ExpenseIn):
@@ -74,6 +86,10 @@ class ExpensePatch(CamelModel):
     amount: float | None = None
     frequency: str | None = None
     notes: str | None = None
+    account_id: str | None = None
+    next_date: str | None = None
+
+    _blank_auto_pay = field_validator("account_id", "next_date", mode="before")(_blank_to_none)
 
 
 # ---- installments ----
@@ -87,8 +103,12 @@ class InstallmentIn(CamelModel):
     monthly_payment: float | None = None
     start_date: str | None = None
     notes: str = ""
+    account_id: str | None = None
+    next_due_date: str | None = None
 
-    _blank_payment = field_validator("monthly_payment", "start_date", mode="before")(_blank_to_none)
+    _blank_payment = field_validator(
+        "monthly_payment", "start_date", "account_id", "next_due_date", mode="before",
+    )(_blank_to_none)
 
 
 class InstallmentOut(InstallmentIn):
@@ -103,8 +123,12 @@ class InstallmentPatch(CamelModel):
     monthly_payment: float | None = None
     start_date: str | None = None
     notes: str | None = None
+    account_id: str | None = None
+    next_due_date: str | None = None
 
-    _blank_payment = field_validator("monthly_payment", "start_date", mode="before")(_blank_to_none)
+    _blank_payment = field_validator(
+        "monthly_payment", "start_date", "account_id", "next_due_date", mode="before",
+    )(_blank_to_none)
 
 
 # ---- subscriptions ----
@@ -117,8 +141,9 @@ class SubscriptionIn(CamelModel):
     category: str = "Other"
     next_renewal: str | None = None
     notes: str = ""
+    account_id: str | None = None
 
-    _blank_renewal = field_validator("next_renewal", mode="before")(_blank_to_none)
+    _blank_renewal = field_validator("next_renewal", "account_id", mode="before")(_blank_to_none)
 
 
 class SubscriptionOut(SubscriptionIn):
@@ -132,8 +157,9 @@ class SubscriptionPatch(CamelModel):
     category: str | None = None
     next_renewal: str | None = None
     notes: str | None = None
+    account_id: str | None = None
 
-    _blank_renewal = field_validator("next_renewal", mode="before")(_blank_to_none)
+    _blank_renewal = field_validator("next_renewal", "account_id", mode="before")(_blank_to_none)
 
 
 # ---- goals ----

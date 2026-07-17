@@ -31,6 +31,10 @@ class Income(SQLModel, table=True):
     frequency: str
     type: str = Field(default="net")
     notes: str = Field(default="")
+    # Auto-pay link: when both are set, a catch-up pass (see backend/recurring.py)
+    # posts a transaction and advances next_date each time it elapses.
+    account_id: str | None = Field(default=None)
+    next_date: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -43,6 +47,8 @@ class Expense(SQLModel, table=True):
     amount: float
     frequency: str
     notes: str = Field(default="")
+    account_id: str | None = Field(default=None)
+    next_date: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -57,6 +63,11 @@ class Installment(SQLModel, table=True):
     monthly_payment: float | None = Field(default=None)
     start_date: str | None = Field(default=None)
     notes: str = Field(default="")
+    # Auto-pay link. next_due_date is the mutable "next payment owed" pointer
+    # advanced by the catch-up pass — distinct from the fixed historical
+    # start_date used for the amortization display math.
+    account_id: str | None = Field(default=None)
+    next_due_date: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=_now)
 
 
@@ -70,6 +81,7 @@ class Subscription(SQLModel, table=True):
     category: str = Field(default="Other")
     next_renewal: str | None = Field(default=None)
     notes: str = Field(default="")
+    account_id: str | None = Field(default=None)
     created_at: datetime = Field(default_factory=_now)
 
 

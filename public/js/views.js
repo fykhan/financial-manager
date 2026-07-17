@@ -3,7 +3,7 @@
 import {
   summary, spendingByCategory, installmentStatus, goalStatus,
   toMonthly, FREQ_LABELS, assessSavingsRate, assessDTI, daysUntil,
-  accountBalance, accountsSummary, paymentsDueThisMonth,
+  accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
 } from './calc.js';
 import { donut, compareBars, progressBar, seriesColor } from './charts.js';
 import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, titleCase } from './format.js';
@@ -21,6 +21,13 @@ function empty(ico, title, msg, collection) {
     <h3>${title}</h3><p>${msg}</p>
     <button class="btn btn-primary" data-add="${collection}">+ Add ${collection === 'income' ? 'income' : collection.replace(/s$/, '')}</button>
   </div>`;
+}
+
+/** Small "auto-pay" indicator for records linked to an account. */
+function autoBadge(accountId, data) {
+  if (!accountId) return '';
+  const acc = (data.accounts || []).find(a => a.id === accountId);
+  return `<span class="badge good" title="Auto-pay: ${escapeHtml(acc?.name || 'linked account')}">⚡ ${escapeHtml(acc?.name || 'Auto')}</span>`;
 }
 
 function rowActions(collection, id) {
@@ -103,10 +110,12 @@ function accountsOverviewRow(data) {
   if (!(data.accounts || []).length) return '';
   const acc = accountsSummary(data);
   const due = paymentsDueThisMonth(data);
+  const incoming = incomeDueThisMonth(data);
   return `<div class="section" style="margin-top:24px">
-    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+    <div class="stat-grid">
       ${statTile({ label: 'Total cash', value: money(acc.totalCash) })}
       ${statTile({ label: 'Total credit due', value: money(acc.totalCreditOwed) })}
+      ${statTile({ label: 'Incoming this month', value: money(incoming.total), sub: `${incoming.items.length} payment${incoming.items.length === 1 ? '' : 's'}` })}
       ${statTile({ label: 'Due this month', value: money(due.total), sub: `${due.items.length} payment${due.items.length === 1 ? '' : 's'}` })}
     </div>
   </div>`;
@@ -151,7 +160,7 @@ export function renderIncome(data) {
       <thead><tr><th>Source</th><th>Type</th><th>Frequency</th><th class="num">Amount</th><th class="num">Monthly</th><th></th></tr></thead>
       <tbody>
         ${list.map(i => `<tr>
-          <td class="cell-strong">${escapeHtml(i.source)}${i.notes ? `<div class="cell-muted">${escapeHtml(i.notes)}</div>` : ''}</td>
+          <td class="cell-strong">${escapeHtml(i.source)} ${autoBadge(i.accountId, data)}${i.notes ? `<div class="cell-muted">${escapeHtml(i.notes)}</div>` : ''}</td>
           <td><span class="badge cat">${escapeHtml(i.type || 'net')}</span></td>
           <td>${FREQ_LABELS[i.frequency] || i.frequency}</td>
           <td class="num">${money(i.amount)}</td>
@@ -182,7 +191,7 @@ export function renderExpenses(data) {
         ${sorted.map(e => {
           const m = toMonthly(e.amount, e.frequency);
           return `<tr>
-            <td class="cell-strong">${escapeHtml(e.name)}${e.notes ? `<div class="cell-muted">${escapeHtml(e.notes)}</div>` : ''}</td>
+            <td class="cell-strong">${escapeHtml(e.name)} ${autoBadge(e.accountId, data)}${e.notes ? `<div class="cell-muted">${escapeHtml(e.notes)}</div>` : ''}</td>
             <td><span class="badge cat">${escapeHtml(e.category || 'Other')}</span></td>
             <td>${FREQ_LABELS[e.frequency] || e.frequency}</td>
             <td class="num">${money(e.amount)}</td>
@@ -214,7 +223,7 @@ export function renderInstallments(data) {
       <thead><tr><th>Name</th><th class="num">Monthly</th><th class="num">Remaining</th><th style="min-width:160px">Progress</th><th>Payoff</th><th></th></tr></thead>
       <tbody>
         ${rows.map(({ it, st }) => `<tr>
-          <td class="cell-strong">${escapeHtml(it.name)}
+          <td class="cell-strong">${escapeHtml(it.name)} ${autoBadge(it.accountId, data)}
             <div class="cell-muted">${money(it.principal)} @ ${num(it.apr || 0, (it.apr % 1 ? 2 : 0))}% · ${it.termMonths} mo</div></td>
           <td class="num cell-strong">${money(st.monthlyPayment)}</td>
           <td class="num">${money(st.remainingBalance)}</td>
@@ -246,7 +255,7 @@ export function renderSubscriptions(data) {
       <thead><tr><th>Service</th><th>Category</th><th>Cycle</th><th class="num">Amount</th><th class="num">Monthly</th><th>Next renewal</th><th></th></tr></thead>
       <tbody>
         ${sorted.map(s => `<tr>
-          <td class="cell-strong">${escapeHtml(s.name)}</td>
+          <td class="cell-strong">${escapeHtml(s.name)} ${autoBadge(s.accountId, data)}</td>
           <td><span class="badge cat">${escapeHtml(s.category || 'Other')}</span></td>
           <td>${FREQ_LABELS[s.cycle] || s.cycle}</td>
           <td class="num">${money(s.amount)}</td>
@@ -320,11 +329,13 @@ export function renderAccounts(data) {
 
   const s = accountsSummary(data);
   const due = paymentsDueThisMonth(data);
+  const incoming = incomeDueThisMonth(data);
   const accountName = id => accounts.find(a => a.id === id)?.name || '—';
 
-  const tiles = `<div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+  const tiles = `<div class="stat-grid">
     ${clickableStat('cash', 'Total cash', money(s.totalCash))}
     ${clickableStat('credit', 'Total credit due', money(s.totalCreditOwed), s.totalCreditAvailable > 0 ? `${money(s.totalCreditAvailable)} available` : '')}
+    ${clickableStat('incoming', 'Incoming this month', money(incoming.total), `${incoming.items.length} payment${incoming.items.length === 1 ? '' : 's'}`)}
     ${clickableStat('due', 'Due this month', money(due.total), `${due.items.length} payment${due.items.length === 1 ? '' : 's'}`)}
   </div>`;
 

@@ -3,7 +3,7 @@ from sqlmodel import Session, select
 
 from backend.auth import require_auth
 from backend.db import get_session
-from backend import seed
+from backend import recurring, seed
 from backend.models import Account, Expense, Goal, Income, Installment, Settings, Subscription, Transaction
 from backend.schemas import (
     AccountIn,
@@ -78,6 +78,7 @@ def _wipe(session: Session) -> None:
 
 @router.get("/data", response_model=FullData)
 def get_data(session: Session = Depends(get_session)):
+    recurring.apply_due_transactions(session)
     return _snapshot(session)
 
 
