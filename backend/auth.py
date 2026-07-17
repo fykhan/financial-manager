@@ -95,6 +95,16 @@ def record_attempt(session: Session, ip: str, success: bool) -> None:
     session.commit()
 
 
+def has_valid_session(token: str | None) -> bool:
+    if not token:
+        return False
+    try:
+        jwt.decode(token, _jwt_secret(), algorithms=["HS256"])
+    except jwt.PyJWTError:
+        return False
+    return True
+
+
 def require_auth(
     response: Response,
     gradplan_session: str | None = Cookie(default=None, alias=COOKIE_NAME),
