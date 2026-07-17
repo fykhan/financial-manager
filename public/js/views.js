@@ -4,7 +4,7 @@ import {
   summary, spendingByCategory, installmentStatus, goalStatus,
   toMonthly, FREQ_LABELS, assessSavingsRate, assessDTI, daysUntil,
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
-  budgetStatus, netWorthHistory, debtBalance, debtsSummary,
+  budgetStatus, netWorthHistory, debtBalance, debtsSummary, dueSoon,
 } from './calc.js';
 import { donut, compareBars, progressBar, seriesColor, lineChart } from './charts.js';
 import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, titleCase } from './format.js';
@@ -46,6 +46,36 @@ function statTile({ label, value, sub, subClass = '', dot }) {
   </div>`;
 }
 
+// ---------------- Spending-by-category chart (shared: dashboard + expenses) ----------------
+const SPEND_MODES = {
+  auto: { label: 'Total', sub: "This month's spending by category" },
+  fixed: { label: 'Fixed', sub: 'Fixed monthly costs by category' },
+  transactions: { label: 'Actual', sub: "Logged transactions this month, by category" },
+};
+let spendMode = 'auto';
+export function setSpendMode(mode) { if (SPEND_MODES[mode]) spendMode = mode; }
+
+function spendModeToggle() {
+  return `<div class="flex gap-8" role="group" aria-label="Spending source">
+    ${Object.entries(SPEND_MODES).map(([key, { label }]) => `
+      <button type="button" class="btn btn-sm ${spendMode === key ? 'btn-primary' : 'btn-ghost'}" data-spend-mode="${key}" aria-pressed="${spendMode === key}">${label}</button>
+    `).join('')}
+  </div>`;
+}
+
+/** Reusable "spending by category" panel: donut + fixed/actual/total toggle. */
+function spendingByCategoryPanel(data, { title = 'Where your money goes' } = {}) {
+  const cats = spendingByCategory(data, undefined, spendMode);
+  return `<div class="panel">
+    <div class="flex between center" style="flex-wrap:wrap;gap:10px">
+      <h3 style="margin:0">${title}</h3>
+      ${spendModeToggle()}
+    </div>
+    <div class="panel-sub">${SPEND_MODES[spendMode].sub}</div>
+    ${donut(cats, { centerLabel: 'per month' })}
+  </div>`;
+}
+
 // ---------------- Dashboard ----------------
 export function renderDashboard(data) {
   const s = summary(data);
@@ -57,7 +87,6 @@ export function renderDashboard(data) {
     return `<div class="card">${empty('◧', 'Welcome to GradPlan', 'Add your income and expenses to see your full financial picture, or load sample data from ⚙ Data.', 'income')}</div>`;
   }
 
-  const cats = spendingByCategory(data);
   const net = s.netCashFlow;
 
   const tiles = `<div class="stat-grid">
@@ -67,14 +96,8 @@ export function renderDashboard(data) {
     ${statTile({ label: 'Savings rate', value: pct(s.savingsRate, 0), sub: sr.label, dot: statusColor[sr.level] })}
   </div>`;
 
-  const upcoming = upcomingRenewals(data);
-
   const panels = `<div class="dash-grid">
-    <div class="panel">
-      <h3>Where your money goes</h3>
-      <div class="panel-sub">Monthly spending by category</div>
-      ${donut(cats, { centerLabel: 'per month' })}
-    </div>
+    ${spendingByCategoryPanel(data)}
     <div class="panel">
       <h3>Income vs. expenses</h3>
       <div class="panel-sub">Monthly comparison</div>
@@ -83,15 +106,13 @@ export function renderDashboard(data) {
         { label: 'Expenses', value: s.monthlyExpenses, color: seriesColor(5) },
       ])}
       <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
-        ${miniRow('Recurring expenses', money(s.monthlyRecurringExpenses))}
-        ${miniRow('Subscriptions', money(s.monthlySubscriptions))}
-        ${miniRow('Debt payments', money(s.monthlyDebt))}
         ${miniRow('Goal contributions', money(s.monthlyGoalContrib))}
         <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
           ${miniRow('<strong>Left after goals</strong>', `<strong class="${s.leftoverAfterGoals >= 0 ? 'text-good' : 'text-crit'}">${money(s.leftoverAfterGoals)}</strong>`)}
         </div>
       </div>
     </div>
+    ${budgetsOverviewPanel(data)}
   </div>`;
 
   const health = `<div class="section" style="margin-top:24px">
@@ -103,8 +124,40 @@ export function renderDashboard(data) {
   </div>`;
 
   const accountsRow = accountsOverviewRow(data);
+  const activity = dashboardActivityRow(data);
 
-  return `${tiles}${panels}${health}${accountsRow}${upcoming}`;
+  return `${tiles}${panels}${health}${accountsRow}${activity}`;
+}
+
+/**
+ * Compact "top N budgets closest to (or over) their limit" panel for the
+ * dashboard. Full detail (every budget, add/edit/delete) lives on the
+ * Expenses page's own budgets panel — this is a preview, not a replacement.
+ */
+function budgetsOverviewPanel(data) {
+  const statuses = budgetStatus(data);
+  if (!statuses.length) return '';
+  const statusColor = { good: 'var(--good)', warning: 'var(--warning)', serious: 'var(--serious)', critical: 'var(--critical)' };
+  const top = [...statuses].sort((a, b) => b.pctUsed - a.pctUsed).slice(0, 4);
+  return `<div class="panel">
+    <div class="flex between center">
+      <h3 style="margin:0">Budgets this month</h3>
+      <a href="#expenses" class="text-muted" style="font-size:12.5px">View all →</a>
+    </div>
+    <div class="panel-sub">Spent vs. monthly limit</div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      ${top.map(s => `<div>
+        <div class="flex between" style="font-size:13px;margin-bottom:5px">
+          <span class="flex center gap-8">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${statusColor[s.level]}"></span>
+            ${escapeHtml(s.category)}
+          </span>
+          <span class="text-muted">${money(s.actual)} / ${money(s.limit)}</span>
+        </div>
+        ${progressBar(Math.min(1, s.pctUsed), { good: s.level === 'good' })}
+      </div>`).join('')}
+    </div>
+  </div>`;
 }
 
 function accountsOverviewRow(data) {
@@ -126,21 +179,49 @@ function miniRow(label, value) {
   return `<div class="flex between" style="padding:5px 0;font-size:13.5px"><span class="text-muted">${label}</span><span style="font-variant-numeric:tabular-nums">${value}</span></div>`;
 }
 
-function upcomingRenewals(data) {
-  const items = (data.subscriptions || [])
-    .filter(s => s.nextRenewal)
-    .map(s => ({ ...s, days: daysUntil(s.nextRenewal) }))
-    .filter(s => s.days != null && s.days <= 14)
-    .sort((a, b) => a.days - b.days);
-  if (!items.length) return '';
-  return `<div class="section" style="margin-top:8px">
-    <div class="section-head"><h2>⟳ Renewing soon</h2></div>
+/** Second dashboard row: recent activity (left) + what's due soon (right). */
+function dashboardActivityRow(data) {
+  const panelsHtml = [recentTransactionsPanel(data), dueSoonPanel(data)].filter(Boolean).join('');
+  if (!panelsHtml) return '';
+  return `<div class="dash-grid" style="margin-top:8px">${panelsHtml}</div>`;
+}
+
+function recentTransactionsPanel(data) {
+  const transactions = data.transactions || [];
+  if (!transactions.length) return '';
+  const recent = [...transactions].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
+  return `<div class="panel">
+    <div class="flex between center">
+      <h3 style="margin:0">Recent transactions</h3>
+      <a href="#accounts" class="text-muted" style="font-size:12.5px">View all →</a>
+    </div>
+    <div class="panel-sub">Latest activity across every account</div>
     <div class="table-wrap"><table class="data"><tbody>
-      ${items.map(s => `<tr>
-        <td class="cell-strong" data-label="Service">${escapeHtml(s.name)}</td>
-        <td class="num" data-label="Amount">${money(s.amount)}</td>
-        <td data-label="Status">${s.days <= 0 ? '<span class="badge crit">Due now</span>' : `<span class="badge ${s.days <= 3 ? 'warn' : ''}">in ${s.days} day${s.days === 1 ? '' : 's'}</span>`}</td>
-        <td class="cell-muted" data-label="Renews">${dateLabel(s.nextRenewal)}</td>
+      ${recent.map(t => `<tr>
+        <td class="cell-muted" data-label="Date">${dateLabel(t.date)}</td>
+        <td class="cell-strong" data-label="Description">${escapeHtml(t.description)}</td>
+        <td data-label="Category"><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
+        <td class="num ${t.type === 'income' ? 'text-good' : t.type === 'expense' ? 'text-crit' : ''}" data-label="Amount">${t.type === 'expense' ? '−' : t.type === 'income' ? '+' : ''}${money(t.amount)}</td>
+      </tr>`).join('')}
+    </tbody></table></div>
+  </div>`;
+}
+
+const DUE_SOON_ICON = { subscription: '⟳', expense: '↘', installment: '◈' };
+
+/** Unified "what's coming up" list — subscriptions, auto-pay expenses, and auto-pay installments, merged and date-sorted (see calc.js's dueSoon). */
+function dueSoonPanel(data) {
+  const items = dueSoon(data);
+  if (!items.length) return '';
+  return `<div class="panel">
+    <h3>Due soon</h3>
+    <div class="panel-sub">Subscriptions, bills and installments in the next 14 days</div>
+    <div class="table-wrap"><table class="data"><tbody>
+      ${items.map(i => `<tr>
+        <td class="cell-strong" data-label="Item">${DUE_SOON_ICON[i.kind] || ''} ${escapeHtml(i.name)}</td>
+        <td class="num" data-label="Amount">${money(i.amount)}</td>
+        <td data-label="Status">${i.days <= 0 ? '<span class="badge crit">Due now</span>' : `<span class="badge ${i.days <= 3 ? 'warn' : ''}">in ${i.days} day${i.days === 1 ? '' : 's'}</span>`}</td>
+        <td class="cell-muted" data-label="Date">${dateLabel(i.date)}</td>
       </tr>`).join('')}
     </tbody></table></div>
   </div>`;
@@ -228,6 +309,7 @@ export function renderExpenses(data) {
       { label: 'Top category', value: cats[0] ? escapeHtml(cats[0].category) : '—' },
       { label: 'Line items', value: num(list.length) },
     ])}
+    <div style="margin:20px 0">${spendingByCategoryPanel(data, { title: 'Spending by category' })}</div>
     <div id="list-expenses">${expensesListFragment(data)}</div>`;
 
   return `${expenseSection}${renderBudgetsPanel(data)}`;

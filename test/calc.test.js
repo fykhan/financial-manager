@@ -7,7 +7,7 @@ import {
   assessSavingsRate, assessDTI, daysUntil,
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
   assessBudget, budgetStatus, accountBalanceHistory, netWorthHistory,
-  debtBalance, debtsSummary,
+  debtBalance, debtsSummary, dueSoon,
 } from '../public/js/calc.js';
 
 const approx = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -140,6 +140,53 @@ test('spendingByCategory groups and sorts descending', () => {
   assert.equal(cats[1].category, 'Food');
 });
 
+test('spendingByCategory sources a budgeted category from this month\'s transactions instead of a fixed amount', () => {
+  const data = {
+    budgets: [{ id: 'b1', category: 'Food', monthlyLimit: 280 }],
+    expenses: [
+      { amount: 1200, frequency: 'monthly', category: 'Housing' }, // no budget -> stays fixed
+      { amount: 320, frequency: 'monthly', category: 'Food' }, // budgeted -> ignored in favor of transactions
+    ],
+    transactions: [
+      { type: 'expense', category: 'Food', amount: 40, date: '2026-07-05' },
+      { type: 'expense', category: 'Food', amount: 500, date: '2026-06-01' }, // different month -> excluded
+      { type: 'income', category: 'Food', amount: 999, date: '2026-07-06' }, // wrong type -> excluded
+    ],
+  };
+  const cats = spendingByCategory(data, '2026-07-15');
+  approx(cats.find(c => c.category === 'Housing').amount, 1200);
+  approx(cats.find(c => c.category === 'Food').amount, 40);
+});
+
+test('spendingByCategory "fixed" mode ignores budgets and transactions entirely', () => {
+  const data = {
+    budgets: [{ id: 'b1', category: 'Food', monthlyLimit: 280 }],
+    expenses: [{ amount: 320, frequency: 'monthly', category: 'Food' }],
+    transactions: [{ type: 'expense', category: 'Food', amount: 999, date: '2026-07-05' }],
+  };
+  const cats = spendingByCategory(data, '2026-07-15', 'fixed');
+  assert.equal(cats.length, 1);
+  approx(cats[0].amount, 320);
+});
+
+test('spendingByCategory "transactions" mode ignores fixed records entirely, for every category', () => {
+  const data = {
+    budgets: [{ id: 'b1', category: 'Food', monthlyLimit: 280 }],
+    expenses: [
+      { amount: 320, frequency: 'monthly', category: 'Food' }, // no transaction for it -> excluded
+      { amount: 1200, frequency: 'monthly', category: 'Housing' }, // not budgeted, still excluded in this mode
+    ],
+    transactions: [
+      { type: 'expense', category: 'Food', amount: 40, date: '2026-07-05' },
+      { type: 'expense', category: 'Housing', amount: 25, date: '2026-07-06' }, // unbudgeted category, still counted here
+      { type: 'expense', category: 'Food', amount: 500, date: '2026-06-01' }, // different month -> excluded
+    ],
+  };
+  const cats = spendingByCategory(data, '2026-07-15', 'transactions');
+  approx(cats.find(c => c.category === 'Food').amount, 40);
+  approx(cats.find(c => c.category === 'Housing').amount, 25);
+});
+
 test('health assessments map to status levels', () => {
   assert.equal(assessSavingsRate(0.25).level, 'good');
   assert.equal(assessSavingsRate(0.12).level, 'warning');
@@ -251,6 +298,28 @@ test('incomeDueThisMonth mirrors paymentsDueThisMonth for income records', () =>
   assert.equal(due.items.length, 2);
 });
 
+test('dueSoon merges subscriptions, auto-pay expenses, and auto-pay installments into one dated, sorted list', () => {
+  const data = {
+    subscriptions: [
+      { id: 's1', name: 'Spotify', amount: 11, nextRenewal: '2026-07-20' }, // 5 days out
+      { id: 's2', name: 'Domain', amount: 12, nextRenewal: '2026-09-01' }, // too far out -> excluded
+      { id: 's3', name: 'No date sub', amount: 5 }, // no nextRenewal -> excluded
+    ],
+    expenses: [
+      { id: 'e1', name: 'Rent', amount: 1200, frequency: 'monthly', nextDate: '2026-07-14' }, // 1 day overdue
+      { id: 'e2', name: 'Phone', amount: 40, frequency: 'monthly' }, // no nextDate -> excluded (unlike paymentsDueThisMonth)
+    ],
+    installments: [
+      { id: 'i1', name: 'Car', principal: 1200, monthlyPayment: 100, termMonths: 12, startDate: '2026-01-15', apr: 0, nextDueDate: '2026-07-18' }, // 3 days out
+      { id: 'i2', name: 'Laptop', principal: 1600, monthlyPayment: 145, termMonths: 12, startDate: '2026-01-05', apr: 0 }, // no nextDueDate -> excluded
+    ],
+  };
+  const items = dueSoon(data, 14, '2026-07-15');
+  assert.deepEqual(items.map(i => i.id), ['e1', 'i1', 's1']); // overdue first, then soonest-first
+  assert.equal(items[0].days, -1);
+  approx(items[2].amount, 11);
+});
+
 test('assessBudget maps usage fraction to status levels', () => {
   assert.equal(assessBudget(0.5).level, 'good');
   assert.equal(assessBudget(0.9).level, 'warning');
@@ -258,25 +327,33 @@ test('assessBudget maps usage fraction to status levels', () => {
   assert.equal(assessBudget(1.5).level, 'critical');
 });
 
-test('budgetStatus compares actual monthly-equivalent spend against each budget limit', () => {
+test('budgetStatus compares this month\'s actual transaction spend against each budget limit', () => {
   const data = {
     budgets: [
       { id: 'b1', category: 'Food', monthlyLimit: 280 },
       { id: 'b2', category: 'Entertainment', monthlyLimit: 5 },
-      { id: 'b3', category: 'Savings', monthlyLimit: 100 }, // no spend in this category -> 0 actual
+      { id: 'b3', category: 'Savings', monthlyLimit: 100 }, // no transactions in this category -> 0 actual
     ],
+    // fixed expenses/subscriptions in a budgeted category no longer count —
+    // only this calendar month's real transactions do.
     expenses: [{ amount: 320, frequency: 'monthly', category: 'Food' }],
     subscriptions: [{ amount: 11, cycle: 'monthly', category: 'Entertainment' }],
     installments: [],
+    transactions: [
+      { type: 'expense', category: 'Food', amount: 45, date: '2026-07-05' },
+      { type: 'expense', category: 'Food', amount: 30, date: '2026-07-10' },
+      { type: 'expense', category: 'Entertainment', amount: 11, date: '2026-07-02' },
+      { type: 'expense', category: 'Food', amount: 999, date: '2026-06-20' }, // last month -> excluded
+    ],
   };
   const statuses = budgetStatus(data, '2026-07-15');
   const food = statuses.find(s => s.category === 'Food');
   const fun = statuses.find(s => s.category === 'Entertainment');
   const savings = statuses.find(s => s.category === 'Savings');
-  approx(food.actual, 320);
-  approx(food.remaining, 280 - 320);
-  assert.equal(food.level, 'serious'); // 320/280 ≈ 1.14
-  assert.equal(fun.level, 'critical'); // 11/5 = 2.2
+  approx(food.actual, 75); // the fixed $320 Food expense is ignored; only logged transactions count
+  approx(food.remaining, 280 - 75);
+  assert.equal(food.level, 'good');
+  assert.equal(fun.level, 'critical'); // 11/5 = 2.2, from the transaction, not the subscription
   approx(savings.actual, 0);
   assert.equal(savings.level, 'good');
 });

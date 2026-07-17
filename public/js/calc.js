@@ -208,21 +208,60 @@ export function summary(data, refISO) {
   };
 }
 
-/** Monthly spending grouped by category (expenses + subscriptions + debt). */
-export function spendingByCategory(data, refISO) {
+/**
+ * Monthly spending grouped by category. Three modes:
+ *
+ * - 'auto' (default) — a category with a Budget row is tracked against real
+ *   money movement (this calendar month's expense transactions) instead of
+ *   a fixed guessed amount, so variable spend (food, transport, ...) gets a
+ *   cap without pretending it's a fixed recurring bill. Every other category
+ *   uses the fixed monthly-equivalent (expenses + subscriptions + active
+ *   installment debt). This is what budgetStatus and the summary math use —
+ *   it's the one mode that never double-counts an auto-paid record against
+ *   its own posted transaction.
+ * - 'fixed' — every category uses only the fixed monthly-equivalent,
+ *   ignoring budgets and transactions entirely (the pre-budgets behavior).
+ * - 'transactions' — every category uses only this calendar month's real
+ *   expense transactions, ignoring fixed records entirely.
+ *
+ * 'fixed' and 'transactions' are display-only alternate views (e.g. a
+ * dashboard toggle) — callers that feed budgetStatus or summary() should
+ * stick to the 'auto' default.
+ */
+export function spendingByCategory(data, refISO, mode = 'auto') {
   const map = new Map();
   const add = (cat, amt) => {
     if (amt <= 0) return;
     const key = cat || 'Other';
     map.set(key, (map.get(key) || 0) + amt);
   };
-  (data.expenses || []).forEach(e => add(e.category, toMonthly(e.amount, e.frequency)));
-  (data.subscriptions || []).forEach(s => add(s.category || 'Subscriptions', toMonthly(s.amount, s.cycle)));
-  const debt = (data.installments || []).reduce((s, it) => {
-    const st = installmentStatus(it, refISO);
-    return s + (st.active ? st.monthlyPayment : 0);
-  }, 0);
-  add('Debt & loans', debt);
+
+  const budgeted = mode === 'auto' ? new Set((data.budgets || []).map(b => b.category)) : new Set();
+
+  if (mode !== 'transactions') {
+    (data.expenses || []).forEach(e => {
+      if (!budgeted.has(e.category)) add(e.category, toMonthly(e.amount, e.frequency));
+    });
+    (data.subscriptions || []).forEach(s => {
+      const cat = s.category || 'Subscriptions';
+      if (!budgeted.has(cat)) add(cat, toMonthly(s.amount, s.cycle));
+    });
+    if (!budgeted.has('Debt & loans')) {
+      const debt = (data.installments || []).reduce((s, it) => {
+        const st = installmentStatus(it, refISO);
+        return s + (st.active ? st.monthlyPayment : 0);
+      }, 0);
+      add('Debt & loans', debt);
+    }
+  }
+
+  if (mode !== 'fixed') {
+    (data.transactions || []).forEach(t => {
+      if (t.type !== 'expense' || !inCalendarMonth(t.date, refISO)) return;
+      if (mode === 'auto' && !budgeted.has(t.category)) return;
+      add(t.category, Number(t.amount) || 0);
+    });
+  }
 
   return [...map.entries()]
     .map(([category, amount]) => ({ category, amount }))
@@ -463,6 +502,46 @@ export function incomeDueThisMonth(data, refISO) {
 }
 
 /**
+ * Every dated, upcoming-or-just-overdue obligation — subscription renewals,
+ * auto-pay expenses, auto-pay installments — within `days` of refISO
+ * (default 14), soonest first. Unlike paymentsDueThisMonth (a calendar-month
+ * total feeding the summary math), this only includes records that actually
+ * carry a next-occurrence date, since there's nothing to sort or show a
+ * countdown for on an undated recurring item — those are already reflected
+ * in the monthly totals elsewhere on the dashboard.
+ */
+export function dueSoon(data, days = 14, refISO) {
+  const items = [];
+
+  (data.subscriptions || []).forEach(s => {
+    if (!s.nextRenewal) return;
+    const d = daysUntil(s.nextRenewal, refISO);
+    if (d != null && d <= days) {
+      items.push({ kind: 'subscription', id: s.id, name: s.name, amount: Number(s.amount) || 0, date: s.nextRenewal, days: d });
+    }
+  });
+
+  (data.expenses || []).forEach(e => {
+    if (!e.nextDate) return;
+    const d = daysUntil(e.nextDate, refISO);
+    if (d != null && d <= days) {
+      items.push({ kind: 'expense', id: e.id, name: e.name, amount: Number(e.amount) || 0, date: e.nextDate, days: d });
+    }
+  });
+
+  (data.installments || []).forEach(it => {
+    if (!it.nextDueDate) return;
+    const d = daysUntil(it.nextDueDate, refISO);
+    if (d != null && d <= days) {
+      const st = installmentStatus(it, refISO);
+      items.push({ kind: 'installment', id: it.id, name: it.name, amount: st.monthlyPayment, date: it.nextDueDate, days: d });
+    }
+  });
+
+  return items.sort((a, b) => a.days - b.days);
+}
+
+/**
  * Health assessment for a budget's usage fraction (actual / limit). Same
  * good | warning | serious | critical vocabulary as assessSavingsRate/assessDTI.
  */
@@ -474,10 +553,10 @@ export function assessBudget(pctUsed) {
 }
 
 /**
- * Actual-vs-limit for each budget, using the same monthly-equivalent spend
- * spendingByCategory already computes (expenses + subscriptions + debt by
- * category) — so a budget is meaningful even for users who haven't logged
- * any transactions yet.
+ * Actual-vs-limit for each budget. spendingByCategory already sources a
+ * budgeted category's "actual" from this month's real transactions (see its
+ * own doc comment) — this just looks that number up per budget and compares
+ * it to the limit.
  */
 export function budgetStatus(data, refISO) {
   const budgets = data.budgets || [];

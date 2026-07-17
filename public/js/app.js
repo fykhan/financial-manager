@@ -9,7 +9,7 @@ import {
   renderInstallments, renderSubscriptions, renderGoals, renderAccounts, renderDebts,
   setAccountFilter, clearAccountFilter, renderDrillDown, drillDownTitle,
   toggleSelect, selectAll, clearSelection, clearAllSelections, getSelectedIds,
-  setPage, resetAllPages, LIST_FRAGMENTS,
+  setPage, resetAllPages, LIST_FRAGMENTS, setSpendMode,
 } from './views.js';
 
 const RENDERERS = {
@@ -170,6 +170,7 @@ function wire() {
     const addBtn = e.target.closest('[data-add]');
     const drillBtn = e.target.closest('[data-drill]');
     const clearFilterBtn = e.target.closest('[data-clear-account-filter]');
+    const spendModeBtn = e.target.closest('[data-spend-mode]');
     const selectAllBox = e.target.closest('[data-select-all]');
     const selectBox = e.target.closest('[data-select]');
     const bulkDeleteBtn = e.target.closest('[data-bulk-delete]');
@@ -194,6 +195,7 @@ function wire() {
       return openModal(drillDownTitle(key), renderDrillDown(key, store.getData()));
     }
     if (clearFilterBtn) { clearAccountFilter(); return render(); }
+    if (spendModeBtn) { setSpendMode(spendModeBtn.dataset.spendMode); return render(); }
     if (selectAllBox) {
       const collection = selectAllBox.dataset.selectAll;
       const prefix = `${collection}:`;

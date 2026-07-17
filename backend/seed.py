@@ -41,11 +41,12 @@ def apply_sample(session: Session) -> None:
         # Auto-pay linked: posts to Checking automatically once next_date arrives.
         Expense(id=_uid(), name="Rent", category="Housing", amount=1200, frequency="monthly", notes="Shared apartment",
                 account_id=checking_id, next_date=(today + timedelta(days=14)).isoformat()),
-        Expense(id=_uid(), name="Groceries", category="Food", amount=320, frequency="monthly", notes=""),
         Expense(id=_uid(), name="Utilities", category="Housing", amount=110, frequency="monthly", notes="Electric + water + internet"),
-        Expense(id=_uid(), name="Transit pass", category="Transport", amount=75, frequency="monthly", notes=""),
         Expense(id=_uid(), name="Health insurance", category="Health", amount=180, frequency="monthly", notes=""),
         Expense(id=_uid(), name="Phone plan", category="Bills", amount=40, frequency="monthly", notes=""),
+        # Food and Transport are variable, not fixed — they're tracked via the
+        # Food/Transport Budgets below plus actual Transactions, not a fixed
+        # Expense row (see spendingByCategory in calc.js).
     ])
     session.add_all([
         # Auto-pay linked: posts to Checking automatically once next_due_date arrives.
@@ -80,6 +81,8 @@ def apply_sample(session: Session) -> None:
         Transaction(id=_uid(), date=(today - timedelta(days=6)).isoformat(), description="Groceries", amount=64.50, type="expense", category="Food", account_id=checking_id),
         Transaction(id=_uid(), date=(today - timedelta(days=4)).isoformat(), description="Salary", amount=3800, type="income", category="Income", account_id=checking_id),
         Transaction(id=_uid(), date=(today - timedelta(days=3)).isoformat(), description="Coffee", amount=5.25, type="expense", category="Food", account_id=wallet_id),
+        Transaction(id=_uid(), date=(today - timedelta(days=5)).isoformat(), description="Bus pass top-up", amount=40, type="expense", category="Transport", account_id=checking_id),
+        Transaction(id=_uid(), date=(today - timedelta(days=2)).isoformat(), description="Ride share", amount=18, type="expense", category="Transport", account_id=wallet_id),
         Transaction(id=_uid(), date=(today - timedelta(days=2)).isoformat(), description="Pay off Visa", amount=200, type="transfer", category="Transfer", account_id=checking_id, to_account_id=visa_id),
         Transaction(id=_uid(), date=(today - timedelta(days=1)).isoformat(), description="John paid back $30", amount=30, type="debt", category="Debt", debt_id=john_debt_id, debt_direction="decrease"),
     ])
