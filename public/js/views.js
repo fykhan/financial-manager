@@ -157,10 +157,12 @@ export function renderIncome(data) {
       { label: 'Yearly', value: money(totalMonthly * 12, { cents: false }) },
       { label: 'Sources', value: num(list.length) },
     ])}
+    ${bulkDeleteBar('income')}
     <div class="table-wrap"><table class="data">
-      <thead><tr><th>Source</th><th>Type</th><th>Frequency</th><th class="num">Amount</th><th class="num">Monthly</th><th></th></tr></thead>
+      <thead><tr><th style="width:1%">${selectAllCheckbox('income', list.map(i => i.id))}</th><th>Source</th><th>Type</th><th>Frequency</th><th class="num">Amount</th><th class="num">Monthly</th><th></th></tr></thead>
       <tbody>
         ${list.map(i => `<tr>
+          <td>${selectCheckbox('income', i.id)}</td>
           <td class="cell-strong">${escapeHtml(i.source)} ${autoBadge(i.accountId, data)}${i.notes ? `<div class="cell-muted">${escapeHtml(i.notes)}</div>` : ''}</td>
           <td><span class="badge cat">${escapeHtml(i.type || 'net')}</span></td>
           <td>${FREQ_LABELS[i.frequency] || i.frequency}</td>
@@ -191,12 +193,14 @@ export function renderExpenses(data) {
       { label: 'Top category', value: cats[0] ? escapeHtml(cats[0].category) : '—' },
       { label: 'Line items', value: num(list.length) },
     ])}
+    ${bulkDeleteBar('expenses')}
     <div class="table-wrap"><table class="data">
-      <thead><tr><th>Name</th><th>Category</th><th>Frequency</th><th class="num">Amount</th><th class="num">Monthly</th><th class="num">% of total</th><th></th></tr></thead>
+      <thead><tr><th style="width:1%">${selectAllCheckbox('expenses', sorted.map(e => e.id))}</th><th>Name</th><th>Category</th><th>Frequency</th><th class="num">Amount</th><th class="num">Monthly</th><th class="num">% of total</th><th></th></tr></thead>
       <tbody>
         ${sorted.map(e => {
           const m = toMonthly(e.amount, e.frequency);
           return `<tr>
+            <td>${selectCheckbox('expenses', e.id)}</td>
             <td class="cell-strong">${escapeHtml(e.name)} ${autoBadge(e.accountId, data)}${e.notes ? `<div class="cell-muted">${escapeHtml(e.notes)}</div>` : ''}</td>
             <td><span class="badge cat">${escapeHtml(e.category || 'Other')}</span></td>
             <td>${FREQ_LABELS[e.frequency] || e.frequency}</td>
@@ -220,10 +224,11 @@ function renderBudgetsPanel(data) {
       <button class="btn btn-sm btn-primary" data-add="budgets">+ Add budget</button>
     </div>
     ${!statuses.length ? `<div class="text-muted" style="padding:12px 0">Set a monthly limit per category to track overspending.</div>` : `
+    ${bulkToolbar('budgets', statuses.map(s => s.id))}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px">
       ${statuses.map(s => `<div class="panel">
         <div class="flex between center" style="margin-bottom:2px">
-          <h3 style="margin:0">${escapeHtml(s.category)}</h3>
+          <span class="flex center gap-8">${selectCheckbox('budgets', s.id)}<h3 style="margin:0">${escapeHtml(s.category)}</h3></span>
           ${rowActions('budgets', s.id)}
         </div>
         <div class="panel-sub"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${statusColor[s.level]};margin-right:6px"></span>${s.label}</div>
@@ -252,10 +257,12 @@ export function renderInstallments(data) {
       { label: 'Lifetime interest', value: money(totalInterest, { cents: false }) },
       { label: 'Active', value: `${num(rows.filter(r => r.st.active).length)} / ${num(list.length)}` },
     ])}
+    ${bulkDeleteBar('installments')}
     <div class="table-wrap"><table class="data">
-      <thead><tr><th>Name</th><th class="num">Monthly</th><th class="num">Remaining</th><th style="min-width:160px">Progress</th><th>Payoff</th><th></th></tr></thead>
+      <thead><tr><th style="width:1%">${selectAllCheckbox('installments', list.map(it => it.id))}</th><th>Name</th><th class="num">Monthly</th><th class="num">Remaining</th><th style="min-width:160px">Progress</th><th>Payoff</th><th></th></tr></thead>
       <tbody>
         ${rows.map(({ it, st }) => `<tr>
+          <td>${selectCheckbox('installments', it.id)}</td>
           <td class="cell-strong">${escapeHtml(it.name)} ${autoBadge(it.accountId, data)}
             <div class="cell-muted">${money(it.principal)} @ ${num(it.apr || 0, (it.apr % 1 ? 2 : 0))}% · ${it.termMonths} mo</div></td>
           <td class="num cell-strong">${money(st.monthlyPayment)}</td>
@@ -284,10 +291,12 @@ export function renderSubscriptions(data) {
       { label: 'Yearly cost', value: money(monthly * 12, { cents: false }) },
       { label: 'Services', value: num(list.length) },
     ])}
+    ${bulkDeleteBar('subscriptions')}
     <div class="table-wrap"><table class="data">
-      <thead><tr><th>Service</th><th>Category</th><th>Cycle</th><th class="num">Amount</th><th class="num">Monthly</th><th>Next renewal</th><th></th></tr></thead>
+      <thead><tr><th style="width:1%">${selectAllCheckbox('subscriptions', sorted.map(s => s.id))}</th><th>Service</th><th>Category</th><th>Cycle</th><th class="num">Amount</th><th class="num">Monthly</th><th>Next renewal</th><th></th></tr></thead>
       <tbody>
         ${sorted.map(s => `<tr>
+          <td>${selectCheckbox('subscriptions', s.id)}</td>
           <td class="cell-strong">${escapeHtml(s.name)} ${autoBadge(s.accountId, data)}</td>
           <td><span class="badge cat">${escapeHtml(s.category || 'Other')}</span></td>
           <td>${FREQ_LABELS[s.cycle] || s.cycle}</td>
@@ -321,6 +330,7 @@ export function renderGoals(data) {
       { label: 'Monthly set aside', value: money(monthlyContrib) },
       { label: 'Overall progress', value: totalTarget > 0 ? pct(totalSaved / totalTarget, 0) : '—' },
     ])}
+    ${bulkToolbar('goals', list.map(g => g.id))}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
       ${list.map(g => {
         const st = goalStatus(g);
@@ -332,7 +342,7 @@ export function renderGoals(data) {
           : '<span class="badge warn">Behind</span>';
         return `<div class="panel">
           <div class="flex between center" style="margin-bottom:2px">
-            <h3 style="margin:0">${escapeHtml(g.name)}</h3>
+            <span class="flex center gap-8">${selectCheckbox('goals', g.id)}<h3 style="margin:0">${escapeHtml(g.name)}</h3></span>
             ${rowActions('goals', g.id)}
           </div>
           <div class="panel-sub">${money(g.saved || 0)} of ${money(g.target)} ${track}</div>
@@ -354,22 +364,59 @@ export function renderGoals(data) {
     </div>`;
 }
 
+// ---------------- Bulk select (any collection) ----------------
+const selections = new Map(); // collection -> Set<id>
+function selectionFor(collection) {
+  if (!selections.has(collection)) selections.set(collection, new Set());
+  return selections.get(collection);
+}
+export function toggleSelect(collection, id) {
+  const sel = selectionFor(collection);
+  sel.has(id) ? sel.delete(id) : sel.add(id);
+}
+export function selectAll(collection, ids, checked) {
+  const sel = selectionFor(collection);
+  ids.forEach(id => { checked ? sel.add(id) : sel.delete(id); });
+}
+export function clearSelection(collection) { selectionFor(collection).clear(); }
+export function clearAllSelections() { selections.forEach(sel => sel.clear()); }
+export function getSelectedIds(collection) { return [...selectionFor(collection)]; }
+export function selectionCount(collection) { return selectionFor(collection).size; }
+
+/** Checkbox-column header cell + bulk-delete toolbar button for a list of records. */
+function selectAllCheckbox(collection, ids) {
+  const sel = selectionFor(collection);
+  const allSelected = ids.length > 0 && ids.every(id => sel.has(id));
+  return `<input type="checkbox" data-select-all="${collection}" ${allSelected ? 'checked' : ''}>`;
+}
+function selectCheckbox(collection, id) {
+  return `<input type="checkbox" data-select="${collection}:${id}" ${selectionFor(collection).has(id) ? 'checked' : ''}>`;
+}
+function bulkDeleteBar(collection) {
+  const n = selectionCount(collection);
+  if (!n) return '';
+  return `<div class="flex center gap-8" style="margin-bottom:12px">
+    <button class="btn btn-sm btn-danger" data-bulk-delete="${collection}">🗑 Delete selected (${n})</button>
+  </div>`;
+}
+
+/** For card-grid views (no table header to host a "select all" checkbox):
+ * an always-visible select-all toggle, plus the delete button once something's picked. */
+function bulkToolbar(collection, ids) {
+  const n = selectionCount(collection);
+  return `<div class="flex center gap-8" style="margin-bottom:12px;flex-wrap:wrap">
+    <label class="flex center gap-8" style="font-size:12px;color:var(--muted);cursor:pointer">
+      ${selectAllCheckbox(collection, ids)} <span>Select all</span>
+    </label>
+    ${n ? `<button class="btn btn-sm btn-danger" data-bulk-delete="${collection}">🗑 Delete selected (${n})</button>` : ''}
+  </div>`;
+}
+
 // ---------------- Accounts ----------------
 let accountFilter = null;
 /** Select (or toggle off, if already selected) an account to filter the ledger by. */
-export function setAccountFilter(id) { accountFilter = accountFilter === id ? null : id; clearTransactionSelection(); }
+export function setAccountFilter(id) { accountFilter = accountFilter === id ? null : id; clearSelection('transactions'); }
 export function clearAccountFilter() { accountFilter = null; }
-
-let selectedTransactions = new Set();
-export function toggleTransactionSelect(id) {
-  if (selectedTransactions.has(id)) selectedTransactions.delete(id);
-  else selectedTransactions.add(id);
-}
-export function selectAllTransactions(ids, checked) {
-  ids.forEach(id => { checked ? selectedTransactions.add(id) : selectedTransactions.delete(id); });
-}
-export function clearTransactionSelection() { selectedTransactions.clear(); }
-export function getSelectedTransactionIds() { return [...selectedTransactions]; }
 
 export function renderAccounts(data) {
   const accounts = data.accounts || [];
@@ -405,26 +452,21 @@ export function renderAccounts(data) {
       <button type="button" data-clear-account-filter title="Show all accounts" style="all:unset;cursor:pointer;margin-left:4px">✕</button>
     </span>` : '';
 
-  const allSelected = sorted.length > 0 && sorted.every(t => selectedTransactions.has(t.id));
-  const selectedCount = sorted.filter(t => selectedTransactions.has(t.id)).length;
-
   const ledger = `<div class="section">
     <div class="section-head">
       <div class="flex center gap-8"><h2>Transactions</h2>${filterChip}</div>
-      <div class="flex center gap-8">
-        ${selectedCount ? `<button class="btn btn-sm btn-danger" data-bulk-delete-transactions>🗑 Delete selected (${selectedCount})</button>` : ''}
-        <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
-      </div>
+      <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
     </div>
+    ${bulkDeleteBar('transactions')}
     ${!sorted.length ? `<div class="text-muted" style="padding:12px 0">${accountFilter ? 'No transactions for this account yet.' : 'No transactions logged yet.'}</div>` : `
     <div class="table-wrap"><table class="data">
       <thead><tr>
-        <th style="width:1%"><input type="checkbox" data-txn-select-all ${allSelected ? 'checked' : ''}></th>
+        <th style="width:1%">${selectAllCheckbox('transactions', sorted.map(t => t.id))}</th>
         <th>Date</th><th>Description</th><th>Category</th><th>Account</th><th class="num">Amount</th><th></th>
       </tr></thead>
       <tbody>
         ${sorted.map(t => `<tr>
-          <td><input type="checkbox" data-txn-select="${t.id}" ${selectedTransactions.has(t.id) ? 'checked' : ''}></td>
+          <td>${selectCheckbox('transactions', t.id)}</td>
           <td class="cell-muted">${dateLabel(t.date)}</td>
           <td class="cell-strong">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
           <td><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
@@ -535,13 +577,14 @@ export function renderDebts(data) {
     ${statTile({ label: 'Net', value: money(s.net), subClass: s.net >= 0 ? 'pos' : 'neg', sub: s.net >= 0 ? 'In your favor' : 'You\'re net negative' })}
   </div>`;
 
-  const cards = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;margin:20px 0">
+  const debtsBulkBar = bulkToolbar('debts', debts.map(d => d.id));
+  const cards = `${debtsBulkBar}<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;margin:20px 0">
     ${debts.map(d => {
       const bal = debtBalance(d, transactions);
       const owedByMe = d.direction === 'owed_by_me';
       return `<div class="panel">
         <div class="flex between center" style="margin-bottom:2px">
-          <h3 style="margin:0">${escapeHtml(d.person)}</h3>
+          <span class="flex center gap-8">${selectCheckbox('debts', d.id)}<h3 style="margin:0">${escapeHtml(d.person)}</h3></span>
           ${rowActions('debts', d.id)}
         </div>
         <div class="panel-sub">${owedByMe ? 'You owe them' : 'They owe you'}</div>
@@ -560,11 +603,13 @@ export function renderDebts(data) {
     <div class="section-head"><h2>Debt transactions</h2>
       <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
     </div>
+    ${bulkDeleteBar('transactions')}
     ${!debtTxns.length ? `<div class="text-muted" style="padding:12px 0">No debt transactions logged yet.</div>` : `
     <div class="table-wrap"><table class="data">
-      <thead><tr><th>Date</th><th>Description</th><th>Person</th><th>Effect</th><th class="num">Amount</th><th></th></tr></thead>
+      <thead><tr><th style="width:1%">${selectAllCheckbox('transactions', debtTxns.map(t => t.id))}</th><th>Date</th><th>Description</th><th>Person</th><th>Effect</th><th class="num">Amount</th><th></th></tr></thead>
       <tbody>
         ${debtTxns.map(t => `<tr>
+          <td>${selectCheckbox('transactions', t.id)}</td>
           <td class="cell-muted">${dateLabel(t.date)}</td>
           <td class="cell-strong">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
           <td>${escapeHtml(debtName(t.debtId))}</td>

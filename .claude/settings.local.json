@@ -41,7 +41,8 @@
       "Bash(node --check public/js/charts.js)",
       "Bash(node --check public/js/views.js)",
       "Bash(node --check public/js/calc.js)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(node --check public/js/app.js)"
     ]
   },
   "enabledPlugins": {

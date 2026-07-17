@@ -8,7 +8,7 @@ import {
   viewTitle, renderDashboard, renderIncome, renderExpenses,
   renderInstallments, renderSubscriptions, renderGoals, renderAccounts, renderDebts,
   setAccountFilter, clearAccountFilter, renderDrillDown, drillDownTitle,
-  toggleTransactionSelect, selectAllTransactions, clearTransactionSelection, getSelectedTransactionIds,
+  toggleSelect, selectAll, clearSelection, clearAllSelections, getSelectedIds,
 } from './views.js';
 
 const RENDERERS = {
@@ -41,7 +41,7 @@ function render() {
 function navigate(view) {
   if (!RENDERERS[view]) return;
   clearAccountFilter();
-  clearTransactionSelection();
+  clearAllSelections();
   current = view;
   location.hash = view;
   render();
@@ -168,9 +168,9 @@ function wire() {
     const addBtn = e.target.closest('[data-add]');
     const drillBtn = e.target.closest('[data-drill]');
     const clearFilterBtn = e.target.closest('[data-clear-account-filter]');
-    const txnSelectAll = e.target.closest('[data-txn-select-all]');
-    const txnSelect = e.target.closest('[data-txn-select]');
-    const bulkDeleteBtn = e.target.closest('[data-bulk-delete-transactions]');
+    const selectAllBox = e.target.closest('[data-select-all]');
+    const selectBox = e.target.closest('[data-select]');
+    const bulkDeleteBtn = e.target.closest('[data-bulk-delete]');
     const accountCard = e.target.closest('[data-account-card]');
 
     // Order matters: edit/delete/select controls are nested inside the
@@ -191,19 +191,27 @@ function wire() {
       return openModal(drillDownTitle(key), renderDrillDown(key, store.getData()));
     }
     if (clearFilterBtn) { clearAccountFilter(); return render(); }
-    if (txnSelectAll) {
-      const ids = [...document.querySelectorAll('[data-txn-select]')].map(el => el.dataset.txnSelect);
-      selectAllTransactions(ids, txnSelectAll.checked);
+    if (selectAllBox) {
+      const collection = selectAllBox.dataset.selectAll;
+      const prefix = `${collection}:`;
+      const ids = [...document.querySelectorAll('[data-select^="' + prefix + '"]')]
+        .map(el => el.dataset.select.slice(prefix.length));
+      selectAll(collection, ids, selectAllBox.checked);
       return render();
     }
-    if (txnSelect) { toggleTransactionSelect(txnSelect.dataset.txnSelect); return render(); }
+    if (selectBox) {
+      const [collection, id] = selectBox.dataset.select.split(':');
+      toggleSelect(collection, id);
+      return render();
+    }
     if (bulkDeleteBtn) {
-      const ids = getSelectedTransactionIds();
+      const collection = bulkDeleteBtn.dataset.bulkDelete;
+      const ids = getSelectedIds(collection);
       if (!ids.length) return;
-      if (await confirmDialog('Delete selected transactions?', `Remove ${ids.length} transaction${ids.length === 1 ? '' : 's'}? This can't be undone.`)) {
+      if (await confirmDialog('Delete selected?', `Remove ${ids.length} item${ids.length === 1 ? '' : 's'}? This can't be undone.`)) {
         try {
-          await Promise.all(ids.map(id => store.remove('transactions', id)));
-          clearTransactionSelection();
+          await Promise.all(ids.map(id => store.remove(collection, id)));
+          clearSelection(collection);
           toast('Deleted', '');
         } catch { /* store.js already toasted individual failures */ }
       }
