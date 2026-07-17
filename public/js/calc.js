@@ -211,14 +211,15 @@ export function summary(data, refISO) {
 /**
  * Monthly spending grouped by category. Three modes:
  *
- * - 'auto' (default) — a category with a Budget row is tracked against real
- *   money movement (this calendar month's expense transactions) instead of
- *   a fixed guessed amount, so variable spend (food, transport, ...) gets a
- *   cap without pretending it's a fixed recurring bill. Every other category
- *   uses the fixed monthly-equivalent (expenses + subscriptions + active
- *   installment debt). This is what budgetStatus and the summary math use —
- *   it's the one mode that never double-counts an auto-paid record against
- *   its own posted transaction.
+ * - 'auto' (default) — a category is tracked against real money movement
+ *   (this calendar month's expense transactions) instead of a fixed guessed
+ *   amount whenever either (a) it has a Budget row, or (b) a transaction
+ *   actually landed in it this month — real activity always wins over a
+ *   projection, so the total stays truthful even for categories nobody set
+ *   a budget on. Every other category uses the fixed monthly-equivalent
+ *   (expenses + subscriptions + active installment debt). This is what
+ *   budgetStatus and the summary math use — it's the one mode that never
+ *   double-counts an auto-paid record against its own posted transaction.
  * - 'fixed' — every category uses only the fixed monthly-equivalent,
  *   ignoring budgets and transactions entirely (the pre-budgets behavior).
  * - 'transactions' — every category uses only this calendar month's real
@@ -236,17 +237,23 @@ export function spendingByCategory(data, refISO, mode = 'auto') {
     map.set(key, (map.get(key) || 0) + amt);
   };
 
-  const budgeted = mode === 'auto' ? new Set((data.budgets || []).map(b => b.category)) : new Set();
+  let transactionSourced = new Set();
+  if (mode === 'auto') {
+    transactionSourced = new Set((data.budgets || []).map(b => b.category));
+    (data.transactions || []).forEach(t => {
+      if (t.type === 'expense' && inCalendarMonth(t.date, refISO)) transactionSourced.add(t.category || 'Other');
+    });
+  }
 
   if (mode !== 'transactions') {
     (data.expenses || []).forEach(e => {
-      if (!budgeted.has(e.category)) add(e.category, toMonthly(e.amount, e.frequency));
+      if (!transactionSourced.has(e.category || 'Other')) add(e.category, toMonthly(e.amount, e.frequency));
     });
     (data.subscriptions || []).forEach(s => {
       const cat = s.category || 'Subscriptions';
-      if (!budgeted.has(cat)) add(cat, toMonthly(s.amount, s.cycle));
+      if (!transactionSourced.has(cat)) add(cat, toMonthly(s.amount, s.cycle));
     });
-    if (!budgeted.has('Debt & loans')) {
+    if (!transactionSourced.has('Debt & loans')) {
       const debt = (data.installments || []).reduce((s, it) => {
         const st = installmentStatus(it, refISO);
         return s + (st.active ? st.monthlyPayment : 0);
@@ -257,9 +264,7 @@ export function spendingByCategory(data, refISO, mode = 'auto') {
 
   if (mode !== 'fixed') {
     (data.transactions || []).forEach(t => {
-      if (t.type !== 'expense' || !inCalendarMonth(t.date, refISO)) return;
-      if (mode === 'auto' && !budgeted.has(t.category)) return;
-      add(t.category, Number(t.amount) || 0);
+      if (t.type === 'expense' && inCalendarMonth(t.date, refISO)) add(t.category, Number(t.amount) || 0);
     });
   }
 

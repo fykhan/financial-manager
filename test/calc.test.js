@@ -158,6 +158,32 @@ test('spendingByCategory sources a budgeted category from this month\'s transact
   approx(cats.find(c => c.category === 'Food').amount, 40);
 });
 
+test('spendingByCategory "auto" mode still counts a transaction in a category with no budget', () => {
+  const data = {
+    budgets: [{ id: 'b1', category: 'Food', monthlyLimit: 280 }],
+    expenses: [{ amount: 1200, frequency: 'monthly', category: 'Housing' }], // no matching transaction -> stays fixed
+    transactions: [
+      { type: 'expense', category: 'Shopping', amount: 55, date: '2026-07-05' }, // no budget in this category
+    ],
+  };
+  const cats = spendingByCategory(data, '2026-07-15');
+  approx(cats.find(c => c.category === 'Housing').amount, 1200);
+  approx(cats.find(c => c.category === 'Shopping').amount, 55);
+});
+
+test('spendingByCategory "auto" mode counts every transaction even with zero budgets configured', () => {
+  const data = {
+    expenses: [{ amount: 1200, frequency: 'monthly', category: 'Housing' }],
+    transactions: [
+      { type: 'expense', category: 'Food', amount: 40, date: '2026-07-05' },
+      { type: 'expense', category: 'Food', amount: 500, date: '2026-06-01' }, // different month -> excluded
+    ],
+  };
+  const cats = spendingByCategory(data, '2026-07-15');
+  approx(cats.find(c => c.category === 'Housing').amount, 1200);
+  approx(cats.find(c => c.category === 'Food').amount, 40);
+});
+
 test('spendingByCategory "fixed" mode ignores budgets and transactions entirely', () => {
   const data = {
     budgets: [{ id: 'b1', category: 'Food', monthlyLimit: 280 }],
