@@ -36,7 +36,11 @@
       "Bash(curl -s -H 'Cookie: gradplan_session=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3ODQyNTc1OTIuODkzMjUyLCJleHAiOjE3ODY4NDk1OTIuODkzMjUyfQ.-b27jYd9KLtvtrNaNoyhUDlufbyLdwGmKBOu_b_ljhI' http://localhost:4173/api/accounts)",
       "Bash(taskkill //F //PID 5784)",
       "Bash(tasklist //FI \"IMAGENAME eq python.exe\")",
-      "Bash(tasklist //FI \"IMAGENAME eq chrome*\")"
+      "Bash(tasklist //FI \"IMAGENAME eq chrome*\")",
+      "Bash(grep -n \"assessDTI\\\\|^export function\\\\|^$\" public/js/calc.js)",
+      "Bash(node --check public/js/charts.js)",
+      "Bash(node --check public/js/views.js)",
+      "Bash(node --check public/js/calc.js)"
     ]
   },
   "enabledPlugins": {

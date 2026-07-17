@@ -98,6 +98,16 @@ class Goal(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
+class Budget(SQLModel, table=True):
+    __tablename__ = "budgets"
+
+    id: str = Field(primary_key=True)
+    category: str
+    monthly_limit: float
+    notes: str = Field(default="")
+    created_at: datetime = Field(default_factory=_now)
+
+
 class Account(SQLModel, table=True):
     __tablename__ = "accounts"
 
@@ -106,6 +116,17 @@ class Account(SQLModel, table=True):
     type: str
     balance: float = Field(default=0)
     credit_limit: float | None = Field(default=None)
+    notes: str = Field(default="")
+    created_at: datetime = Field(default_factory=_now)
+
+
+class Debt(SQLModel, table=True):
+    __tablename__ = "debts"
+
+    id: str = Field(primary_key=True)
+    person: str
+    direction: str  # owed_to_me | owed_by_me
+    amount: float
     notes: str = Field(default="")
     created_at: datetime = Field(default_factory=_now)
 
@@ -121,6 +142,11 @@ class Transaction(SQLModel, table=True):
     category: str = Field(default="Other")
     account_id: str | None = Field(default=None)
     to_account_id: str | None = Field(default=None)
+    # Debt transactions ('debt' type) are independent of accounts: they only
+    # move a debt's own balance, via debt_id + debt_direction ('increase' |
+    # 'decrease' the outstanding amount, regardless of which way the debt runs).
+    debt_id: str | None = Field(default=None)
+    debt_direction: str | None = Field(default=None)
     notes: str = Field(default="")
     created_at: datetime = Field(default_factory=_now)
 

@@ -4,14 +4,15 @@ import {
   summary, spendingByCategory, installmentStatus, goalStatus,
   toMonthly, FREQ_LABELS, assessSavingsRate, assessDTI, daysUntil,
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
+  budgetStatus, netWorthHistory, debtBalance, debtsSummary,
 } from './calc.js';
-import { donut, compareBars, progressBar, seriesColor } from './charts.js';
+import { donut, compareBars, progressBar, seriesColor, lineChart } from './charts.js';
 import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, titleCase } from './format.js';
 
 const VIEW_TITLES = {
   dashboard: 'Dashboard', income: 'Income', expenses: 'Expenses',
   installments: 'Installments', subscriptions: 'Subscriptions', goals: 'Savings goals',
-  accounts: 'Accounts',
+  accounts: 'Accounts', debts: 'Debts',
 };
 export function viewTitle(v) { return VIEW_TITLES[v] || 'GradPlan'; }
 
@@ -174,11 +175,16 @@ export function renderIncome(data) {
 // ---------------- Expenses ----------------
 export function renderExpenses(data) {
   const list = data.expenses || [];
-  if (!list.length) return empty('↘', 'No expenses yet', 'Track your rent, food, bills and everything else.', 'expenses');
+  const budgets = data.budgets || [];
+  if (!list.length && !budgets.length) return empty('↘', 'No expenses yet', 'Track your rent, food, bills and everything else.', 'expenses');
+
   const totalMonthly = list.reduce((s, e) => s + toMonthly(e.amount, e.frequency), 0);
   const cats = spendingByCategory({ expenses: list });
   const sorted = [...list].sort((a, b) => toMonthly(b.amount, b.frequency) - toMonthly(a.amount, a.frequency));
-  return `
+
+  const expenseSection = !list.length
+    ? `<div class="card">${empty('↘', 'No expenses yet', 'Track your rent, food, bills and everything else.', 'expenses')}</div>`
+    : `
     ${summaryStrip([
       { label: 'Total monthly expenses', value: money(totalMonthly) },
       { label: 'Yearly', value: money(totalMonthly * 12, { cents: false }) },
@@ -202,6 +208,33 @@ export function renderExpenses(data) {
         }).join('')}
       </tbody>
     </table></div>`;
+
+  return `${expenseSection}${renderBudgetsPanel(data)}`;
+}
+
+function renderBudgetsPanel(data) {
+  const statuses = budgetStatus(data);
+  const statusColor = { good: 'var(--good)', warning: 'var(--warning)', serious: 'var(--serious)', critical: 'var(--critical)' };
+  return `<div class="section" style="margin-top:28px">
+    <div class="section-head"><h2>Budgets</h2>
+      <button class="btn btn-sm btn-primary" data-add="budgets">+ Add budget</button>
+    </div>
+    ${!statuses.length ? `<div class="text-muted" style="padding:12px 0">Set a monthly limit per category to track overspending.</div>` : `
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px">
+      ${statuses.map(s => `<div class="panel">
+        <div class="flex between center" style="margin-bottom:2px">
+          <h3 style="margin:0">${escapeHtml(s.category)}</h3>
+          ${rowActions('budgets', s.id)}
+        </div>
+        <div class="panel-sub"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${statusColor[s.level]};margin-right:6px"></span>${s.label}</div>
+        ${progressBar(Math.min(1, s.pctUsed), { good: s.level === 'good' })}
+        <div class="flex between" style="margin-top:10px;font-size:13px">
+          <span class="text-muted">${money(s.actual)} of ${money(s.limit)}</span>
+          <span class="${s.remaining >= 0 ? 'text-good' : 'text-crit'}">${s.remaining >= 0 ? `${money(s.remaining)} left` : `${money(-s.remaining)} over`}</span>
+        </div>
+      </div>`).join('')}
+    </div>`}
+  </div>`;
 }
 
 // ---------------- Installments ----------------
@@ -324,8 +357,19 @@ export function renderGoals(data) {
 // ---------------- Accounts ----------------
 let accountFilter = null;
 /** Select (or toggle off, if already selected) an account to filter the ledger by. */
-export function setAccountFilter(id) { accountFilter = accountFilter === id ? null : id; }
+export function setAccountFilter(id) { accountFilter = accountFilter === id ? null : id; clearTransactionSelection(); }
 export function clearAccountFilter() { accountFilter = null; }
+
+let selectedTransactions = new Set();
+export function toggleTransactionSelect(id) {
+  if (selectedTransactions.has(id)) selectedTransactions.delete(id);
+  else selectedTransactions.add(id);
+}
+export function selectAllTransactions(ids, checked) {
+  ids.forEach(id => { checked ? selectedTransactions.add(id) : selectedTransactions.delete(id); });
+}
+export function clearTransactionSelection() { selectedTransactions.clear(); }
+export function getSelectedTransactionIds() { return [...selectedTransactions]; }
 
 export function renderAccounts(data) {
   const accounts = data.accounts || [];
@@ -336,6 +380,7 @@ export function renderAccounts(data) {
   const due = paymentsDueThisMonth(data);
   const incoming = incomeDueThisMonth(data);
   const accountName = id => accounts.find(a => a.id === id)?.name || '—';
+  const debtName = id => (data.debts || []).find(d => d.id === id)?.person || '—';
 
   const tiles = `<div class="stat-grid">
     ${clickableStat('cash', 'Total cash', money(s.totalCash))}
@@ -348,6 +393,8 @@ export function renderAccounts(data) {
     ${accounts.map(a => accountCard(a, transactions, a.id === accountFilter)).join('')}
   </div>`;
 
+  const netWorthPanel = renderNetWorthPanel(data);
+
   const filtered = accountFilter
     ? transactions.filter(t => t.accountId === accountFilter || t.toAccountId === accountFilter)
     : transactions;
@@ -358,20 +405,32 @@ export function renderAccounts(data) {
       <button type="button" data-clear-account-filter title="Show all accounts" style="all:unset;cursor:pointer;margin-left:4px">✕</button>
     </span>` : '';
 
+  const allSelected = sorted.length > 0 && sorted.every(t => selectedTransactions.has(t.id));
+  const selectedCount = sorted.filter(t => selectedTransactions.has(t.id)).length;
+
   const ledger = `<div class="section">
     <div class="section-head">
       <div class="flex center gap-8"><h2>Transactions</h2>${filterChip}</div>
-      <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
+      <div class="flex center gap-8">
+        ${selectedCount ? `<button class="btn btn-sm btn-danger" data-bulk-delete-transactions>🗑 Delete selected (${selectedCount})</button>` : ''}
+        <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
+      </div>
     </div>
     ${!sorted.length ? `<div class="text-muted" style="padding:12px 0">${accountFilter ? 'No transactions for this account yet.' : 'No transactions logged yet.'}</div>` : `
     <div class="table-wrap"><table class="data">
-      <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Account</th><th class="num">Amount</th><th></th></tr></thead>
+      <thead><tr>
+        <th style="width:1%"><input type="checkbox" data-txn-select-all ${allSelected ? 'checked' : ''}></th>
+        <th>Date</th><th>Description</th><th>Category</th><th>Account</th><th class="num">Amount</th><th></th>
+      </tr></thead>
       <tbody>
         ${sorted.map(t => `<tr>
+          <td><input type="checkbox" data-txn-select="${t.id}" ${selectedTransactions.has(t.id) ? 'checked' : ''}></td>
           <td class="cell-muted">${dateLabel(t.date)}</td>
           <td class="cell-strong">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
           <td><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
-          <td>${t.type === 'transfer' ? `${escapeHtml(accountName(t.accountId))} → ${escapeHtml(accountName(t.toAccountId))}` : escapeHtml(accountName(t.accountId))}</td>
+          <td>${t.type === 'transfer' ? `${escapeHtml(accountName(t.accountId))} → ${escapeHtml(accountName(t.toAccountId))}`
+            : t.type === 'debt' ? `Debt: ${escapeHtml(debtName(t.debtId))}`
+            : escapeHtml(accountName(t.accountId))}</td>
           <td class="num ${t.type === 'income' ? 'text-good' : t.type === 'expense' ? 'text-crit' : ''}">${t.type === 'expense' ? '−' : t.type === 'income' ? '+' : ''}${money(t.amount)}</td>
           <td>${rowActions('transactions', t.id)}</td>
         </tr>`).join('')}
@@ -379,7 +438,17 @@ export function renderAccounts(data) {
     </table></div>`}
   </div>`;
 
-  return `${tiles}${cards}${ledger}`;
+  return `${tiles}${cards}${netWorthPanel}${ledger}`;
+}
+
+function renderNetWorthPanel(data) {
+  const { opening, points } = netWorthHistory(data);
+  const series = [{ date: null, balance: opening }, ...points];
+  return `<div class="panel" style="margin-bottom:24px">
+    <h3>Net worth over time</h3>
+    <div class="panel-sub">Cash minus credit owed, from your opening balances through every logged transaction</div>
+    ${lineChart(series)}
+  </div>`;
 }
 
 function clickableStat(key, label, value, sub = '') {
@@ -388,6 +457,45 @@ function clickableStat(key, label, value, sub = '') {
     <div class="stat-value tabular">${value}</div>
     ${sub ? `<div class="stat-sub">${sub}</div>` : ''}
   </button>`;
+}
+
+const DRILL_TITLES = { cash: 'Cash accounts', credit: 'Credit accounts', incoming: 'Incoming this month', due: 'Due this month' };
+const DRILL_KIND_LABELS = { subscription: 'Subscription', installment: 'Installment', expense: 'Expense', income: 'Income' };
+
+export function drillDownTitle(key) { return DRILL_TITLES[key] || 'Details'; }
+
+/** Itemized breakdown behind a clickable summary tile (cash / credit / incoming / due). */
+export function renderDrillDown(key, data) {
+  const accounts = data.accounts || [];
+  const transactions = data.transactions || [];
+
+  if (key === 'cash' || key === 'credit') {
+    const wantCredit = key === 'credit';
+    const list = accounts.filter(a => (a.type === 'credit') === wantCredit);
+    if (!list.length) return `<div class="text-muted">No ${wantCredit ? 'credit cards' : 'cash accounts'} yet.</div>`;
+    return `<div style="display:flex;flex-direction:column;gap:2px">
+      ${list.map(a => {
+        const bal = accountBalance(a, transactions);
+        const limit = Number(a.creditLimit) || 0;
+        return `<div class="flex between" style="padding:10px 0;border-bottom:1px solid var(--border-2)">
+          <span>${escapeHtml(a.name)} <span class="text-muted" style="font-size:12px">(${titleCase(a.type)})</span></span>
+          <strong>${money(bal)}${wantCredit && limit > 0 ? ` <span class="text-muted" style="font-weight:400">/ ${money(limit)}</span>` : ''}</strong>
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  const { items } = key === 'due' ? paymentsDueThisMonth(data) : incomeDueThisMonth(data);
+  if (!items.length) return `<div class="text-muted">Nothing ${key === 'due' ? 'due' : 'incoming'} this month.</div>`;
+  return `<div style="display:flex;flex-direction:column;gap:2px">
+    ${items.map(i => `<div class="flex between" style="padding:10px 0;border-bottom:1px solid var(--border-2)">
+      <span>${escapeHtml(i.name)} <span class="badge cat" style="margin-left:6px">${DRILL_KIND_LABELS[i.kind] || i.kind}</span></span>
+      <strong>${money(i.amount)}</strong>
+    </div>`).join('')}
+    <div class="flex between" style="padding-top:12px;font-weight:600">
+      <span>Total</span><strong>${money(items.reduce((s, i) => s + i.amount, 0))}</strong>
+    </div>
+  </div>`;
 }
 
 function accountCard(a, transactions, selected = false) {
@@ -411,6 +519,64 @@ function accountCard(a, transactions, selected = false) {
       <div class="stat-value tabular" style="margin-top:8px">${money(bal)}</div>
     `}
   </div>`;
+}
+
+// ---------------- Debts ----------------
+export function renderDebts(data) {
+  const debts = data.debts || [];
+  if (!debts.length) return empty('⇄', 'No debts yet', 'Track money people owe you, or money you owe them.', 'debts');
+
+  const transactions = data.transactions || [];
+  const s = debtsSummary(data);
+
+  const tiles = `<div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+    ${statTile({ label: 'Owed to you', value: money(s.totalOwedToMe) })}
+    ${statTile({ label: 'You owe', value: money(s.totalOwedByMe) })}
+    ${statTile({ label: 'Net', value: money(s.net), subClass: s.net >= 0 ? 'pos' : 'neg', sub: s.net >= 0 ? 'In your favor' : 'You\'re net negative' })}
+  </div>`;
+
+  const cards = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:16px;margin:20px 0">
+    ${debts.map(d => {
+      const bal = debtBalance(d, transactions);
+      const owedByMe = d.direction === 'owed_by_me';
+      return `<div class="panel">
+        <div class="flex between center" style="margin-bottom:2px">
+          <h3 style="margin:0">${escapeHtml(d.person)}</h3>
+          ${rowActions('debts', d.id)}
+        </div>
+        <div class="panel-sub">${owedByMe ? 'You owe them' : 'They owe you'}</div>
+        <div class="stat-value tabular ${owedByMe ? 'text-crit' : 'text-good'}" style="margin-top:8px">${money(bal)}</div>
+        ${d.notes ? `<div class="cell-muted" style="margin-top:8px">${escapeHtml(d.notes)}</div>` : ''}
+      </div>`;
+    }).join('')}
+  </div>`;
+
+  const debtTxns = [...transactions]
+    .filter(t => t.type === 'debt')
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const debtName = id => debts.find(d => d.id === id)?.person || '—';
+
+  const ledger = `<div class="section">
+    <div class="section-head"><h2>Debt transactions</h2>
+      <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
+    </div>
+    ${!debtTxns.length ? `<div class="text-muted" style="padding:12px 0">No debt transactions logged yet.</div>` : `
+    <div class="table-wrap"><table class="data">
+      <thead><tr><th>Date</th><th>Description</th><th>Person</th><th>Effect</th><th class="num">Amount</th><th></th></tr></thead>
+      <tbody>
+        ${debtTxns.map(t => `<tr>
+          <td class="cell-muted">${dateLabel(t.date)}</td>
+          <td class="cell-strong">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
+          <td>${escapeHtml(debtName(t.debtId))}</td>
+          <td><span class="badge ${t.debtDirection === 'decrease' ? 'good' : 'cat'}">${t.debtDirection === 'decrease' ? 'Repayment' : 'Added'}</span></td>
+          <td class="num">${money(t.amount)}</td>
+          <td>${rowActions('transactions', t.id)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`}
+  </div>`;
+
+  return `${tiles}${cards}${ledger}`;
 }
 
 function summaryStrip(items) {

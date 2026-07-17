@@ -6,6 +6,8 @@ import {
   installmentStatus, goalStatus, summary, spendingByCategory,
   assessSavingsRate, assessDTI, daysUntil,
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
+  assessBudget, budgetStatus, accountBalanceHistory, netWorthHistory,
+  debtBalance, debtsSummary,
 } from '../public/js/calc.js';
 
 const approx = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -247,4 +249,117 @@ test('incomeDueThisMonth mirrors paymentsDueThisMonth for income records', () =>
   const due = incomeDueThisMonth(data, '2026-07-15');
   approx(due.total, 3800 + 450);
   assert.equal(due.items.length, 2);
+});
+
+test('assessBudget maps usage fraction to status levels', () => {
+  assert.equal(assessBudget(0.5).level, 'good');
+  assert.equal(assessBudget(0.9).level, 'warning');
+  assert.equal(assessBudget(1.1).level, 'serious');
+  assert.equal(assessBudget(1.5).level, 'critical');
+});
+
+test('budgetStatus compares actual monthly-equivalent spend against each budget limit', () => {
+  const data = {
+    budgets: [
+      { id: 'b1', category: 'Food', monthlyLimit: 280 },
+      { id: 'b2', category: 'Entertainment', monthlyLimit: 5 },
+      { id: 'b3', category: 'Savings', monthlyLimit: 100 }, // no spend in this category -> 0 actual
+    ],
+    expenses: [{ amount: 320, frequency: 'monthly', category: 'Food' }],
+    subscriptions: [{ amount: 11, cycle: 'monthly', category: 'Entertainment' }],
+    installments: [],
+  };
+  const statuses = budgetStatus(data, '2026-07-15');
+  const food = statuses.find(s => s.category === 'Food');
+  const fun = statuses.find(s => s.category === 'Entertainment');
+  const savings = statuses.find(s => s.category === 'Savings');
+  approx(food.actual, 320);
+  approx(food.remaining, 280 - 320);
+  assert.equal(food.level, 'serious'); // 320/280 ≈ 1.14
+  assert.equal(fun.level, 'critical'); // 11/5 = 2.2
+  approx(savings.actual, 0);
+  assert.equal(savings.level, 'good');
+});
+
+test('accountBalanceHistory produces one running-balance point per day, in order', () => {
+  const checking = { id: 'a1', type: 'checking', balance: 1000 };
+  const txns = [
+    { accountId: 'a1', type: 'expense', amount: 100, date: '2026-07-05' },
+    { accountId: 'a1', type: 'income', amount: 50, date: '2026-07-05' }, // same day, collapses into one point
+    { accountId: 'a1', type: 'expense', amount: 20, date: '2026-07-10' },
+    { accountId: 'other', type: 'expense', amount: 999, date: '2026-07-06' }, // unrelated, ignored
+  ];
+  const hist = accountBalanceHistory(checking, txns);
+  assert.equal(hist.length, 2);
+  assert.equal(hist[0].date, '2026-07-05');
+  approx(hist[0].balance, 1000 - 100 + 50);
+  assert.equal(hist[1].date, '2026-07-10');
+  approx(hist[1].balance, 1000 - 100 + 50 - 20);
+});
+
+test('accountBalanceHistory inverts sign for a credit account', () => {
+  const visa = { id: 'c1', type: 'credit', balance: 100 };
+  const txns = [{ accountId: 'c1', type: 'expense', amount: 50, date: '2026-07-05' }];
+  const hist = accountBalanceHistory(visa, txns);
+  approx(hist[0].balance, 150); // a charge increases owed
+});
+
+test('netWorthHistory: transfers (incl. paying off a credit card) never move the line', () => {
+  const data = {
+    accounts: [
+      { id: 'a1', type: 'checking', balance: 1000 },
+      { id: 'c1', type: 'credit', balance: 200 },
+    ],
+    transactions: [
+      { accountId: 'a1', toAccountId: 'c1', type: 'transfer', amount: 150, date: '2026-07-05' },
+    ],
+  };
+  const { opening, points } = netWorthHistory(data);
+  approx(opening, 1000 - 200);
+  assert.equal(points.length, 0); // no income/expense transactions -> no movement points at all
+});
+
+test('netWorthHistory moves on income/expense and compounds day over day', () => {
+  const data = {
+    accounts: [{ id: 'a1', type: 'checking', balance: 1000 }],
+    transactions: [
+      { accountId: 'a1', type: 'income', amount: 500, date: '2026-07-05' },
+      { accountId: 'a1', type: 'expense', amount: 200, date: '2026-07-10' },
+    ],
+  };
+  const { opening, points } = netWorthHistory(data);
+  approx(opening, 1000);
+  assert.equal(points.length, 2);
+  approx(points[0].balance, 1500);
+  approx(points[1].balance, 1300);
+});
+
+test('debtBalance grows on increase and shrinks on decrease, regardless of direction', () => {
+  const owedToMe = { id: 'd1', direction: 'owed_to_me', amount: 100 };
+  const txns = [
+    { type: 'debt', debtId: 'd1', debtDirection: 'increase', amount: 20 }, // lent more -> 120
+    { type: 'debt', debtId: 'd1', debtDirection: 'decrease', amount: 30 }, // partial repayment -> 90
+    { type: 'debt', debtId: 'other', debtDirection: 'increase', amount: 999 }, // unrelated, ignored
+  ];
+  approx(debtBalance(owedToMe, txns), 100 + 20 - 30);
+
+  const owedByMe = { id: 'd2', direction: 'owed_by_me', amount: 50 };
+  const txns2 = [{ type: 'debt', debtId: 'd2', debtDirection: 'decrease', amount: 20 }]; // paid back $20 -> owe 30
+  approx(debtBalance(owedByMe, txns2), 30);
+});
+
+test('debtsSummary splits totals by direction', () => {
+  const data = {
+    debts: [
+      { id: 'd1', direction: 'owed_to_me', amount: 100 },
+      { id: 'd2', direction: 'owed_by_me', amount: 50 },
+    ],
+    transactions: [
+      { type: 'debt', debtId: 'd1', debtDirection: 'decrease', amount: 30 }, // -> 70 owed to me
+    ],
+  };
+  const s = debtsSummary(data);
+  approx(s.totalOwedToMe, 70);
+  approx(s.totalOwedByMe, 50);
+  approx(s.net, 70 - 50);
 });

@@ -12,11 +12,21 @@ const EXPENSE_CATEGORIES = ['Housing', 'Food', 'Transport', 'Health', 'Bills', '
 const SUB_CATEGORIES = ['Entertainment', 'Software', 'Health', 'News', 'Music', 'Cloud', 'Other'];
 
 const ACCOUNT_TYPES = ['checking', 'savings', 'cash', 'wallet', 'credit'];
-const TXN_TYPES = ['expense', 'income', 'transfer'];
-const TXN_CATEGORIES = ['Housing', 'Food', 'Transport', 'Health', 'Bills', 'Education', 'Entertainment', 'Shopping', 'Personal', 'Savings', 'Income', 'Transfer', 'Other'];
+const TXN_TYPES = ['expense', 'income', 'transfer', 'debt'];
+const TXN_CATEGORIES = ['Housing', 'Food', 'Transport', 'Health', 'Bills', 'Education', 'Entertainment', 'Shopping', 'Personal', 'Savings', 'Income', 'Transfer', 'Debt', 'Other'];
+
+const DEBT_DIRECTIONS = [
+  { value: 'owed_to_me', label: 'They owe me' },
+  { value: 'owed_by_me', label: 'I owe them' },
+];
+const DEBT_TXN_DIRECTIONS = [
+  { value: 'increase', label: "Add to debt (grows what's owed)" },
+  { value: 'decrease', label: 'Repayment (reduces what\'s owed)' },
+];
 
 const accountOptions = () => store.getData().accounts.map(a => ({ value: a.id, label: `${a.name} (${titleCase(a.type)})` }));
 const accountOptionsOptional = () => [{ value: '', label: '— none (forecast only) —' }, ...accountOptions()];
+const debtOptions = () => store.getData().debts.map(d => ({ value: d.id, label: `${d.person} (${d.direction === 'owed_by_me' ? 'you owe' : 'owes you'})` }));
 
 // Field schema per collection. Each field: { name, label, type, options?, required?, step?, hint?, half? }
 const SCHEMAS = {
@@ -117,17 +127,41 @@ const SCHEMAS = {
       { name: 'description', label: 'Description', type: 'text', required: true, placeholder: 'e.g. Groceries, Salary, Pay off Visa' },
       { name: 'amount', label: 'Amount', type: 'number', required: true, step: '0.01', half: true },
       { name: 'category', label: 'Category', type: 'select', options: TXN_CATEGORIES, def: 'Other', half: true },
-      { name: 'accountId', label: 'Account', type: 'select', options: accountOptions, required: true, half: true },
+      { name: 'accountId', label: 'Account', type: 'select', options: accountOptions, half: true, visibleIf: v => v.type !== 'debt' },
       { name: 'toAccountId', label: 'To account', type: 'select', options: accountOptions, half: true, hint: 'Transfers only', visibleIf: v => v.type === 'transfer' },
+      { name: 'debtId', label: 'Person', type: 'select', options: debtOptions, half: true, visibleIf: v => v.type === 'debt' },
+      { name: 'debtDirection', label: 'Effect', type: 'select', options: DEBT_TXN_DIRECTIONS, def: 'increase', half: true, visibleIf: v => v.type === 'debt' },
       { name: 'notes', label: 'Notes', type: 'textarea' },
     ],
     validate: v => {
       if (v.type === 'transfer') {
         if (!v.toAccountId) return 'To account is required for transfers';
         if (v.accountId && v.accountId === v.toAccountId) return 'From and to accounts must be different';
+      } else if (v.type === 'debt') {
+        if (!v.debtId) return 'Select which debt this affects';
+        if (!v.debtDirection) return 'Select whether this adds to or reduces the debt';
+      } else if (!v.accountId) {
+        return 'Account is required';
       }
       return null;
     },
+  },
+  budgets: {
+    title: 'budget',
+    fields: [
+      { name: 'category', label: 'Category', type: 'select', options: EXPENSE_CATEGORIES, def: 'Housing' },
+      { name: 'monthlyLimit', label: 'Monthly limit', type: 'number', required: true, step: '0.01' },
+      { name: 'notes', label: 'Notes', type: 'textarea' },
+    ],
+  },
+  debts: {
+    title: 'debt',
+    fields: [
+      { name: 'person', label: 'Person', type: 'text', required: true, placeholder: 'e.g. John, Sarah' },
+      { name: 'direction', label: 'Direction', type: 'select', options: DEBT_DIRECTIONS, def: 'owed_to_me', half: true },
+      { name: 'amount', label: 'Amount', type: 'number', required: true, step: '0.01', half: true, hint: 'How much is currently outstanding' },
+      { name: 'notes', label: 'Notes', type: 'textarea' },
+    ],
   },
 };
 
@@ -232,7 +266,7 @@ export function openForm(collection, id = null) {
   const delBtn = form.querySelector('[data-act="delete"]');
   if (delBtn) delBtn.addEventListener('click', async () => {
     const { confirmDialog } = await import('./ui.js');
-    if (await confirmDialog('Delete?', `Remove “${escapeHtml(record.name || record.source || record.description || 'this item')}”? This can't be undone.`)) {
+    if (await confirmDialog('Delete?', `Remove “${escapeHtml(record.name || record.source || record.description || record.category || record.person || 'this item')}”? This can't be undone.`)) {
       delBtn.disabled = true;
       try {
         await store.remove(collection, id);

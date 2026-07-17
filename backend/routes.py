@@ -4,11 +4,17 @@ from sqlmodel import Session, select
 from backend.auth import require_auth
 from backend.db import get_session
 from backend import recurring, seed
-from backend.models import Account, Expense, Goal, Income, Installment, Settings, Subscription, Transaction
+from backend.models import Account, Budget, Debt, Expense, Goal, Income, Installment, Settings, Subscription, Transaction
 from backend.schemas import (
     AccountIn,
     AccountOut,
     AccountPatch,
+    BudgetIn,
+    BudgetOut,
+    BudgetPatch,
+    DebtIn,
+    DebtOut,
+    DebtPatch,
     ExpenseIn,
     ExpenseOut,
     ExpensePatch,
@@ -43,6 +49,8 @@ COLLECTIONS = {
     "goals": (Goal, GoalIn, GoalOut, GoalPatch),
     "accounts": (Account, AccountIn, AccountOut, AccountPatch),
     "transactions": (Transaction, TransactionIn, TransactionOut, TransactionPatch),
+    "budgets": (Budget, BudgetIn, BudgetOut, BudgetPatch),
+    "debts": (Debt, DebtIn, DebtOut, DebtPatch),
 }
 
 
@@ -67,11 +75,13 @@ def _snapshot(session: Session) -> FullData:
         goals=[GoalOut.model_validate(r) for r in session.exec(select(Goal)).all()],
         accounts=[AccountOut.model_validate(r) for r in session.exec(select(Account)).all()],
         transactions=[TransactionOut.model_validate(r) for r in session.exec(select(Transaction)).all()],
+        budgets=[BudgetOut.model_validate(r) for r in session.exec(select(Budget)).all()],
+        debts=[DebtOut.model_validate(r) for r in session.exec(select(Debt)).all()],
     )
 
 
 def _wipe(session: Session) -> None:
-    for Model in (Income, Expense, Installment, Subscription, Goal, Transaction, Account):
+    for Model in (Income, Expense, Installment, Subscription, Goal, Transaction, Account, Budget, Debt):
         for row in session.exec(select(Model)).all():
             session.delete(row)
 
@@ -147,6 +157,8 @@ def import_data(body: dict, session: Session = Depends(get_session)):
     session.add_all(Goal(**r.model_dump(exclude={"created_at"})) for r in parsed.goals)
     session.add_all(Account(**r.model_dump(exclude={"created_at"})) for r in parsed.accounts)
     session.add_all(Transaction(**r.model_dump(exclude={"created_at"})) for r in parsed.transactions)
+    session.add_all(Budget(**r.model_dump(exclude={"created_at"})) for r in parsed.budgets)
+    session.add_all(Debt(**r.model_dump(exclude={"created_at"})) for r in parsed.debts)
     session.commit()
     return _snapshot(session)
 

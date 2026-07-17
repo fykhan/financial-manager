@@ -6,8 +6,9 @@ import { initModalChrome, openModal, closeModal, toast, confirmDialog, download 
 import { openForm } from './forms.js';
 import {
   viewTitle, renderDashboard, renderIncome, renderExpenses,
-  renderInstallments, renderSubscriptions, renderGoals, renderAccounts,
-  setAccountFilter, clearAccountFilter,
+  renderInstallments, renderSubscriptions, renderGoals, renderAccounts, renderDebts,
+  setAccountFilter, clearAccountFilter, renderDrillDown, drillDownTitle,
+  toggleTransactionSelect, selectAllTransactions, clearTransactionSelection, getSelectedTransactionIds,
 } from './views.js';
 
 const RENDERERS = {
@@ -18,6 +19,7 @@ const RENDERERS = {
   subscriptions: renderSubscriptions,
   goals: renderGoals,
   accounts: renderAccounts,
+  debts: renderDebts,
 };
 
 let current = 'dashboard';
@@ -39,6 +41,7 @@ function render() {
 function navigate(view) {
   if (!RENDERERS[view]) return;
   clearAccountFilter();
+  clearTransactionSelection();
   current = view;
   location.hash = view;
   render();
@@ -164,21 +167,49 @@ function wire() {
     const delBtn = e.target.closest('[data-del]');
     const addBtn = e.target.closest('[data-add]');
     const drillBtn = e.target.closest('[data-drill]');
-    const accountCard = e.target.closest('[data-account-card]');
     const clearFilterBtn = e.target.closest('[data-clear-account-filter]');
+    const txnSelectAll = e.target.closest('[data-txn-select-all]');
+    const txnSelect = e.target.closest('[data-txn-select]');
+    const bulkDeleteBtn = e.target.closest('[data-bulk-delete-transactions]');
+    const accountCard = e.target.closest('[data-account-card]');
+
+    // Order matters: edit/delete/select controls are nested inside the
+    // clickable account card, so they must be checked before it.
     if (editBtn) return openForm(editBtn.dataset.edit, editBtn.dataset.id);
-    if (addBtn) return openForm(addBtn.dataset.add);
-    if (drillBtn) return toast('Detailed view coming soon', '');
-    if (clearFilterBtn) { clearAccountFilter(); return render(); }
-    if (accountCard) { setAccountFilter(accountCard.dataset.accountCard); return render(); }
     if (delBtn) {
       const { collection, id } = { collection: delBtn.dataset.del, id: delBtn.dataset.id };
       const rec = store.getById(collection, id);
-      const name = rec?.name || rec?.source || rec?.description || 'this item';
+      const name = rec?.name || rec?.source || rec?.description || rec?.category || rec?.person || 'this item';
       if (await confirmDialog('Delete?', `Remove “${name}”? This can't be undone.`)) {
         try { await store.remove(collection, id); toast('Deleted', ''); } catch { /* store.js already toasted */ }
       }
+      return;
     }
+    if (addBtn) return openForm(addBtn.dataset.add);
+    if (drillBtn) {
+      const key = drillBtn.dataset.drill;
+      return openModal(drillDownTitle(key), renderDrillDown(key, store.getData()));
+    }
+    if (clearFilterBtn) { clearAccountFilter(); return render(); }
+    if (txnSelectAll) {
+      const ids = [...document.querySelectorAll('[data-txn-select]')].map(el => el.dataset.txnSelect);
+      selectAllTransactions(ids, txnSelectAll.checked);
+      return render();
+    }
+    if (txnSelect) { toggleTransactionSelect(txnSelect.dataset.txnSelect); return render(); }
+    if (bulkDeleteBtn) {
+      const ids = getSelectedTransactionIds();
+      if (!ids.length) return;
+      if (await confirmDialog('Delete selected transactions?', `Remove ${ids.length} transaction${ids.length === 1 ? '' : 's'}? This can't be undone.`)) {
+        try {
+          await Promise.all(ids.map(id => store.remove('transactions', id)));
+          clearTransactionSelection();
+          toast('Deleted', '');
+        } catch { /* store.js already toasted individual failures */ }
+      }
+      return;
+    }
+    if (accountCard) { setAccountFilter(accountCard.dataset.accountCard); return render(); }
   });
 
   // Re-render whenever the store changes.

@@ -1,6 +1,6 @@
 // charts.js — dependency-free SVG charts using the validated data-viz palette.
 
-import { money, moneyCompact, pct, escapeHtml } from './format.js';
+import { money, moneyCompact, pct, escapeHtml, dateLabel } from './format.js';
 
 // Categorical palette (validated order). Light stays print-safe; dark goes neon.
 // Index 1 (income) and 5 (expenses) are kept high-contrast — see compareBars callers.
@@ -102,4 +102,49 @@ export function compareBars(rows, { format = money } = {}) {
 export function progressBar(fraction, { good = false, height = 8 } = {}) {
   const w = Math.max(0, Math.min(1, fraction)) * 100;
   return `<div class="progress ${good ? 'good' : ''}" style="height:${height}px"><span style="width:${w}%"></span></div>`;
+}
+
+/**
+ * Chronological line chart for a running balance. `points` = [{ date, balance }]
+ * already in ascending date order (see calc.js's accountBalanceHistory /
+ * netWorthHistory). Draws a dashed zero-line when the series crosses zero,
+ * since that's the "went negative" moment that matters most here.
+ */
+export function lineChart(points, { height = 160, format = money } = {}) {
+  if (!points || points.length < 2) {
+    return `<div class="empty" style="padding:30px"><div class="empty-ico">↝</div><p>Not enough history yet — log a few transactions to see a trend.</p></div>`;
+  }
+
+  const width = 560;
+  const pad = 10;
+  const values = points.map(p => p.balance);
+  let min = Math.min(...values, 0);
+  let max = Math.max(...values, 0);
+  if (min === max) { min -= 1; max += 1; }
+
+  const xFor = i => pad + (i / (points.length - 1)) * (width - pad * 2);
+  const yFor = v => height - pad - ((v - min) / (max - min)) * (height - pad * 2);
+
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${xFor(i).toFixed(1)} ${yFor(p.balance).toFixed(1)}`).join(' ');
+  const areaPath = `${linePath} L ${xFor(points.length - 1).toFixed(1)} ${height - pad} L ${xFor(0).toFixed(1)} ${height - pad} Z`;
+  const last = points[points.length - 1];
+  const rising = last.balance >= points[0].balance;
+  const color = rising ? seriesColor(1) : seriesColor(5); // same high-contrast income/expense pair compareBars uses
+  const zeroY = yFor(0);
+  const showZero = min < 0 && max > 0;
+
+  return `<div>
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Balance over time" style="width:100%;height:${height}px;display:block">
+      ${showZero ? `<line x1="${pad}" y1="${zeroY.toFixed(1)}" x2="${width - pad}" y2="${zeroY.toFixed(1)}" stroke="var(--border-2)" stroke-dasharray="4 4" />` : ''}
+      <path d="${areaPath}" fill="${color}" opacity="0.12" stroke="none" />
+      <path d="${linePath}" fill="none" stroke="${color}" stroke-width="2.5" />
+      <circle cx="${xFor(points.length - 1).toFixed(1)}" cy="${yFor(last.balance).toFixed(1)}" r="4" fill="${color}">
+        <title>${escapeHtml(dateLabel(last.date))}: ${escapeHtml(format(last.balance))}</title>
+      </circle>
+    </svg>
+    <div class="flex between" style="font-size:12px;color:var(--muted);margin-top:6px">
+      <span>${escapeHtml(dateLabel(points[0].date))} · ${escapeHtml(format(points[0].balance))}</span>
+      <span>${escapeHtml(dateLabel(last.date))} · ${escapeHtml(format(last.balance))}</span>
+    </div>
+  </div>`;
 }

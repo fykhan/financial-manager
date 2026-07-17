@@ -13,6 +13,8 @@ const emptyData = () => ({
   goals: [],
   accounts: [],
   transactions: [],
+  budgets: [],
+  debts: [],
 });
 
 const listeners = new Set();
@@ -37,6 +39,8 @@ function normalize(parsed) {
     goals: parsed.goals || [],
     accounts: parsed.accounts || [],
     transactions: parsed.transactions || [],
+    budgets: parsed.budgets || [],
+    debts: parsed.debts || [],
   };
 }
 
@@ -74,7 +78,7 @@ export function updateSettings(patchObj) {
   );
 }
 
-const COLLECTIONS = ['income', 'expenses', 'installments', 'subscriptions', 'goals', 'accounts', 'transactions'];
+const COLLECTIONS = ['income', 'expenses', 'installments', 'subscriptions', 'goals', 'accounts', 'transactions', 'budgets', 'debts'];
 
 export function add(collection, record) {
   if (!COLLECTIONS.includes(collection)) throw new Error('bad collection ' + collection);
@@ -167,5 +171,7 @@ export function exportCSV() {
   data.goals.forEach(g => rows.push(['Goal', g.name, '', g.target, '', `saved: ${g.saved}, monthly: ${g.monthlyContribution}, deadline: ${g.deadline || ''}`, g.notes || '']));
   data.accounts.forEach(a => rows.push(['Account', a.name, a.type, a.balance, '', a.creditLimit ? `limit: ${a.creditLimit}` : '', a.notes || '']));
   data.transactions.forEach(t => rows.push(['Transaction', t.description, t.category || '', t.amount, t.type, t.type === 'transfer' ? `from: ${t.accountId}, to: ${t.toAccountId}` : `account: ${t.accountId}`, t.notes || '']));
+  data.budgets.forEach(b => rows.push(['Budget', b.category, b.category, b.monthlyLimit, 'monthly', '', b.notes || '']));
+  data.debts.forEach(d => rows.push(['Debt', d.person, d.direction === 'owed_by_me' ? 'You owe' : 'Owed to you', d.amount, '', '', d.notes || '']));
   return rows.map(r => r.map(q).join(',')).join('\n');
 }

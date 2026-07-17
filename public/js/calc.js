@@ -278,6 +278,96 @@ export function accountBalance(account, transactions) {
   return (Number(account.balance) || 0) + (isCredit ? -delta : delta);
 }
 
+/**
+ * Chronological running balance for one account: its opening balance, then
+ * one point per calendar day that had at least one transaction touching it,
+ * in date order. Same-day transactions collapse into a single point (the
+ * balance at the end of that day).
+ */
+export function accountBalanceHistory(account, transactions) {
+  const isCredit = account.type === 'credit';
+  const relevant = (transactions || [])
+    .filter(t => t.accountId === account.id || t.toAccountId === account.id)
+    .slice()
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  const points = [];
+  let running = Number(account.balance) || 0;
+  let i = 0;
+  while (i < relevant.length) {
+    const day = relevant[i].date;
+    let dayDelta = 0;
+    while (i < relevant.length && relevant[i].date === day) {
+      dayDelta += literalDelta(relevant[i], account.id);
+      i++;
+    }
+    running += isCredit ? -dayDelta : dayDelta;
+    points.push({ date: day, balance: running });
+  }
+  return points;
+}
+
+/**
+ * Chronological net worth (total cash − total credit owed) across every
+ * account. A transfer between two of the user's own accounts — including
+ * paying down a credit card from a bank account — never changes net worth
+ * by construction, so only income/expense transactions move the line.
+ */
+export function netWorthHistory(data) {
+  const accounts = data.accounts || [];
+  const transactions = data.transactions || [];
+  const opening = accounts.reduce((s, a) => s + (Number(a.balance) || 0) * (a.type === 'credit' ? -1 : 1), 0);
+
+  const sorted = [...transactions].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const points = [];
+  let running = opening;
+  let i = 0;
+  while (i < sorted.length) {
+    const day = sorted[i].date;
+    let dayDelta = 0;
+    let moved = false; // a day with only transfers doesn't touch net worth at all
+    while (i < sorted.length && sorted[i].date === day) {
+      const t = sorted[i];
+      if (t.type === 'income') { dayDelta += Number(t.amount) || 0; moved = true; }
+      else if (t.type === 'expense') { dayDelta -= Number(t.amount) || 0; moved = true; }
+      i++;
+    }
+    if (moved) {
+      running += dayDelta;
+      points.push({ date: day, balance: running });
+    }
+  }
+  return { opening, points };
+}
+
+/**
+ * Current outstanding amount for one debt: its opening `amount` plus every
+ * 'debt' transaction logged against it. A transaction's debtDirection is
+ * 'increase' (lend more / borrow more — grows what's outstanding) or
+ * 'decrease' (a repayment — shrinks it), independent of which way the debt
+ * itself runs (owed_to_me vs owed_by_me) — debts are tracked on their own,
+ * not linked to any account.
+ */
+export function debtBalance(debt, transactions) {
+  const delta = (transactions || [])
+    .filter(t => t.type === 'debt' && t.debtId === debt.id)
+    .reduce((s, t) => s + (t.debtDirection === 'decrease' ? -(Number(t.amount) || 0) : (Number(t.amount) || 0)), 0);
+  return (Number(debt.amount) || 0) + delta;
+}
+
+/** Roll every debt into what's owed to you vs. what you owe others. */
+export function debtsSummary(data) {
+  const debts = data.debts || [];
+  const transactions = data.transactions || [];
+  let totalOwedToMe = 0, totalOwedByMe = 0;
+  debts.forEach(d => {
+    const bal = debtBalance(d, transactions);
+    if (d.direction === 'owed_by_me') totalOwedByMe += bal;
+    else totalOwedToMe += bal;
+  });
+  return { totalOwedToMe, totalOwedByMe, net: totalOwedToMe - totalOwedByMe };
+}
+
 /** Roll every account into cash-on-hand / credit-owed / credit-available / net worth. */
 export function accountsSummary(data) {
   const accounts = data.accounts || [];
@@ -370,4 +460,40 @@ export function incomeDueThisMonth(data, refISO) {
   });
 
   return { items, total: items.reduce((s, i) => s + i.amount, 0) };
+}
+
+/**
+ * Health assessment for a budget's usage fraction (actual / limit). Same
+ * good | warning | serious | critical vocabulary as assessSavingsRate/assessDTI.
+ */
+export function assessBudget(pctUsed) {
+  if (pctUsed <= 0.7) return { level: 'good', label: 'On track' };
+  if (pctUsed <= 1) return { level: 'warning', label: 'Close to limit' };
+  if (pctUsed <= 1.2) return { level: 'serious', label: 'Over budget' };
+  return { level: 'critical', label: 'Way over' };
+}
+
+/**
+ * Actual-vs-limit for each budget, using the same monthly-equivalent spend
+ * spendingByCategory already computes (expenses + subscriptions + debt by
+ * category) — so a budget is meaningful even for users who haven't logged
+ * any transactions yet.
+ */
+export function budgetStatus(data, refISO) {
+  const budgets = data.budgets || [];
+  const spendByCategory = new Map(spendingByCategory(data, refISO).map(s => [s.category, s.amount]));
+  return budgets.map(b => {
+    const actual = spendByCategory.get(b.category) || 0;
+    const limit = Number(b.monthlyLimit) || 0;
+    const pctUsed = limit > 0 ? actual / limit : (actual > 0 ? Infinity : 0);
+    return {
+      id: b.id,
+      category: b.category,
+      limit,
+      actual,
+      remaining: limit - actual,
+      pctUsed,
+      ...assessBudget(pctUsed),
+    };
+  });
 }

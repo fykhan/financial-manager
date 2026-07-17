@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 from sqlmodel import Session
 
-from backend.models import Account, Expense, Goal, Income, Installment, Subscription, Transaction
+from backend.models import Account, Budget, Debt, Expense, Goal, Income, Installment, Subscription, Transaction
 
 
 def _uid() -> str:
@@ -65,8 +65,21 @@ def apply_sample(session: Session) -> None:
         Goal(id=_uid(), name="Travel fund", target=3000, saved=600, monthly_contribution=150, deadline=None, notes=""),
     ])
     session.add_all([
+        Budget(id=_uid(), category="Housing", monthly_limit=1300, notes=""),
+        Budget(id=_uid(), category="Food", monthly_limit=280, notes=""),
+        Budget(id=_uid(), category="Transport", monthly_limit=110, notes=""),
+        Budget(id=_uid(), category="Bills", monthly_limit=45, notes=""),
+        Budget(id=_uid(), category="Entertainment", monthly_limit=5, notes=""),
+    ])
+    john_debt_id, sarah_debt_id = _uid(), _uid()
+    session.add_all([
+        Debt(id=john_debt_id, person="John", direction="owed_to_me", amount=120, notes="Concert tickets"),
+        Debt(id=sarah_debt_id, person="Sarah", direction="owed_by_me", amount=50, notes="Borrowed for groceries"),
+    ])
+    session.add_all([
         Transaction(id=_uid(), date=(today - timedelta(days=6)).isoformat(), description="Groceries", amount=64.50, type="expense", category="Food", account_id=checking_id),
         Transaction(id=_uid(), date=(today - timedelta(days=4)).isoformat(), description="Salary", amount=3800, type="income", category="Income", account_id=checking_id),
         Transaction(id=_uid(), date=(today - timedelta(days=3)).isoformat(), description="Coffee", amount=5.25, type="expense", category="Food", account_id=wallet_id),
         Transaction(id=_uid(), date=(today - timedelta(days=2)).isoformat(), description="Pay off Visa", amount=200, type="transfer", category="Transfer", account_id=checking_id, to_account_id=visa_id),
+        Transaction(id=_uid(), date=(today - timedelta(days=1)).isoformat(), description="John paid back $30", amount=30, type="debt", category="Debt", debt_id=john_debt_id, debt_direction="decrease"),
     ])

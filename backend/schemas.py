@@ -191,6 +191,25 @@ class GoalPatch(CamelModel):
     _blank_deadline = field_validator("deadline", mode="before")(_blank_to_none)
 
 
+# ---- budgets ----
+
+class BudgetIn(CamelModel):
+    id: str
+    category: str
+    monthly_limit: float
+    notes: str = ""
+
+
+class BudgetOut(BudgetIn):
+    created_at: datetime
+
+
+class BudgetPatch(CamelModel):
+    category: str | None = None
+    monthly_limit: float | None = None
+    notes: str | None = None
+
+
 # ---- accounts ----
 
 class AccountIn(CamelModel):
@@ -218,6 +237,27 @@ class AccountPatch(CamelModel):
     _blank_limit = field_validator("credit_limit", mode="before")(_blank_to_none)
 
 
+# ---- debts ----
+
+class DebtIn(CamelModel):
+    id: str
+    person: str
+    direction: str
+    amount: float
+    notes: str = ""
+
+
+class DebtOut(DebtIn):
+    created_at: datetime
+
+
+class DebtPatch(CamelModel):
+    person: str | None = None
+    direction: str | None = None
+    amount: float | None = None
+    notes: str | None = None
+
+
 # ---- transactions ----
 
 class TransactionIn(CamelModel):
@@ -229,9 +269,13 @@ class TransactionIn(CamelModel):
     category: str = "Other"
     account_id: str | None = None
     to_account_id: str | None = None
+    debt_id: str | None = None
+    debt_direction: str | None = None
     notes: str = ""
 
-    _blank_accounts = field_validator("account_id", "to_account_id", mode="before")(_blank_to_none)
+    _blank_accounts = field_validator(
+        "account_id", "to_account_id", "debt_id", "debt_direction", mode="before",
+    )(_blank_to_none)
 
 
 class TransactionOut(TransactionIn):
@@ -246,9 +290,13 @@ class TransactionPatch(CamelModel):
     category: str | None = None
     account_id: str | None = None
     to_account_id: str | None = None
+    debt_id: str | None = None
+    debt_direction: str | None = None
     notes: str | None = None
 
-    _blank_accounts = field_validator("account_id", "to_account_id", mode="before")(_blank_to_none)
+    _blank_accounts = field_validator(
+        "account_id", "to_account_id", "debt_id", "debt_direction", mode="before",
+    )(_blank_to_none)
 
 
 class FullData(CamelModel):
@@ -261,3 +309,5 @@ class FullData(CamelModel):
     goals: list[GoalOut] = Field(default_factory=list)
     accounts: list[AccountOut] = Field(default_factory=list)
     transactions: list[TransactionOut] = Field(default_factory=list)
+    budgets: list[BudgetOut] = Field(default_factory=list)
+    debts: list[DebtOut] = Field(default_factory=list)
