@@ -300,7 +300,7 @@ body::after {
   background: rgba(0, 255, 136, 0.1); color: var(--accent-2);
   box-shadow: none;
 }
-.btn-icon { padding: 7px 9px; }
+.btn-icon { padding: 7px 9px; min-width: 36px; min-height: 36px; justify-content: center; }
 .btn-danger { color: var(--critical); border-color: transparent; }
 .btn-danger:hover {
   color: #fff; border-color: var(--critical);
@@ -422,7 +422,7 @@ table.data tr:last-child td { border-bottom: 0; }
 table.data td.num, table.data th.num { text-align: right; font-variant-numeric: tabular-nums; }
 table.data tbody tr { transition: background 0.12s linear; }
 table.data tr:hover td { background: rgba(255, 0, 255, 0.07); }
-.row-actions { display: flex; gap: 4px; justify-content: flex-end; }
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .cell-strong { font-weight: 400; color: var(--text-1); }
 .cell-muted { color: var(--muted); font-size: 12px; }
 
@@ -548,6 +548,22 @@ table.data tr:hover td { background: rgba(255, 0, 255, 0.07); }
 .wrap { flex-wrap: wrap; }
 .hide { display: none !important; }
 
+/* ---------- Touch targets ---------- */
+/* Bare checkboxes are ~13px by default — nowhere near the ~44px minimum
+   touch target. Bump the control itself, and (for the row-select ones,
+   wrapped in a label by views.js) let the label's own padding/negative-
+   margin trick expand the tappable area without shifting layout. */
+input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2); cursor: pointer; flex-shrink: 0; }
+.check-cell {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 13px; margin: -13px; cursor: pointer;
+}
+.icon-btn-sm {
+  all: unset; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 32px; min-height: 32px; color: var(--text-2);
+}
+.icon-btn-sm:hover { color: var(--accent-2); }
+
 /* ---------- Reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
@@ -567,6 +583,10 @@ table.data tr:hover td { background: rgba(255, 0, 255, 0.07); }
   .field-row { grid-template-columns: 1fr; }
   .view-container { padding: 20px 16px 60px; }
   .topbar { padding: 14px 16px; }
+  /* iOS Safari zooms the viewport on focusing any form control under 16px. */
+  .input, select.input, textarea.input, .input-sm { font-size: 16px; }
+  .btn-icon { min-width: 44px; min-height: 44px; }
+  .row-actions { gap: 8px; }
 }
 @media (max-width: 520px) {
   .stat-grid { grid-template-columns: 1fr 1fr; }

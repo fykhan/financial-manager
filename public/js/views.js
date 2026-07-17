@@ -387,10 +387,10 @@ export function selectionCount(collection) { return selectionFor(collection).siz
 function selectAllCheckbox(collection, ids) {
   const sel = selectionFor(collection);
   const allSelected = ids.length > 0 && ids.every(id => sel.has(id));
-  return `<input type="checkbox" data-select-all="${collection}" ${allSelected ? 'checked' : ''}>`;
+  return `<label class="check-cell"><input type="checkbox" data-select-all="${collection}" ${allSelected ? 'checked' : ''}></label>`;
 }
 function selectCheckbox(collection, id) {
-  return `<input type="checkbox" data-select="${collection}:${id}" ${selectionFor(collection).has(id) ? 'checked' : ''}>`;
+  return `<label class="check-cell"><input type="checkbox" data-select="${collection}:${id}" ${selectionFor(collection).has(id) ? 'checked' : ''}></label>`;
 }
 function bulkDeleteBar(collection) {
   const n = selectionCount(collection);
@@ -404,10 +404,13 @@ function bulkDeleteBar(collection) {
  * an always-visible select-all toggle, plus the delete button once something's picked. */
 function bulkToolbar(collection, ids) {
   const n = selectionCount(collection);
+  // A plain <span> wrapper, not <label> — selectAllCheckbox() already returns
+  // its own <label>, and nested <label> elements are invalid HTML and can
+  // double-toggle inconsistently across browsers.
   return `<div class="flex center gap-8" style="margin-bottom:12px;flex-wrap:wrap">
-    <label class="flex center gap-8" style="font-size:12px;color:var(--muted);cursor:pointer">
+    <span class="flex center gap-8" style="font-size:12px;color:var(--muted)">
       ${selectAllCheckbox(collection, ids)} <span>Select all</span>
-    </label>
+    </span>
     ${n ? `<button class="btn btn-sm btn-danger" data-bulk-delete="${collection}">🗑 Delete selected (${n})</button>` : ''}
   </div>`;
 }
@@ -449,7 +452,7 @@ export function renderAccounts(data) {
   const filterChip = accountFilter ? `
     <span class="badge cat">
       Showing: ${escapeHtml(accountName(accountFilter))}
-      <button type="button" data-clear-account-filter title="Show all accounts" style="all:unset;cursor:pointer;margin-left:4px">✕</button>
+      <button type="button" class="icon-btn-sm" data-clear-account-filter title="Show all accounts" style="margin-left:4px">✕</button>
     </span>` : '';
 
   const ledger = `<div class="section">
