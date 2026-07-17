@@ -2,10 +2,11 @@
 
 import { money, moneyCompact, pct, escapeHtml } from './format.js';
 
-// Categorical palette (validated order). Light & dark are the same 8 hues, stepped.
+// Categorical palette (validated order). Light stays print-safe; dark goes neon.
+// Index 1 (income) and 5 (expenses) are kept high-contrast — see compareBars callers.
 const PALETTE = {
   light: ['#2a78d6', '#008300', '#e87ba4', '#eda100', '#1baf7a', '#eb6834', '#4a3aa7', '#e34948'],
-  dark:  ['#3987e5', '#008300', '#d55181', '#c98500', '#199e70', '#d95926', '#9085e9', '#e66767'],
+  dark:  ['#00ffff', '#00ff9f', '#ff00ff', '#ffcf1a', '#b47bff', '#ff6a3d', '#5ad1ff', '#ff4d6d'],
 };
 
 function theme() {
