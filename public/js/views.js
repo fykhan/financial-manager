@@ -1,17 +1,17 @@
 // views.js — renders each screen as an HTML string
 
 import {
-  summary, spendingByCategory, installmentStatus, goalStatus,
+  summary, spendingByCategory, installmentStatus, savingStatus, savingBalance,
   toMonthly, FREQ_LABELS, assessSavingsRate, assessDTI, daysUntil,
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
-  budgetStatus, netWorthHistory, debtBalance, debtsSummary, dueSoon,
+  budgetStatus, netWorthHistory, currentNetWorth, debtBalance, debtsSummary, dueSoon,
 } from './calc.js';
 import { donut, compareBars, progressBar, seriesColor, lineChart } from './charts.js';
 import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, titleCase } from './format.js';
 
 const VIEW_TITLES = {
   dashboard: 'Dashboard', income: 'Income', expenses: 'Expenses',
-  installments: 'Installments', subscriptions: 'Subscriptions', goals: 'Savings goals',
+  installments: 'Installments', subscriptions: 'Subscriptions', savings: 'Savings',
   accounts: 'Accounts', debts: 'Debts',
 };
 export function viewTitle(v) { return VIEW_TITLES[v] || 'GradPlan'; }
@@ -106,9 +106,9 @@ export function renderDashboard(data) {
         { label: 'Expenses', value: s.monthlyExpenses, color: seriesColor(5) },
       ])}
       <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--border)">
-        ${miniRow('Goal contributions', money(s.monthlyGoalContrib))}
+        ${miniRow('Savings contributions', money(s.monthlySavingsContrib))}
         <div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)">
-          ${miniRow('<strong>Left after goals</strong>', `<strong class="${s.leftoverAfterGoals >= 0 ? 'text-good' : 'text-crit'}">${money(s.leftoverAfterGoals)}</strong>`)}
+          ${miniRow('<strong>Left after savings</strong>', `<strong class="${s.leftoverAfterSavings >= 0 ? 'text-good' : 'text-crit'}">${money(s.leftoverAfterSavings)}</strong>`)}
         </div>
       </div>
     </div>
@@ -119,7 +119,7 @@ export function renderDashboard(data) {
     <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
       ${statTile({ label: 'Debt-to-income', value: pct(s.dti, 0), sub: dti.label, dot: statusColor[dti.level] })}
       ${statTile({ label: 'Total debt remaining', value: moneyCompact(s.totalDebtRemaining), sub: `${s.counts.activeInstallments} active installment${s.counts.activeInstallments === 1 ? '' : 's'}` })}
-      ${statTile({ label: 'Active goals', value: num(s.counts.goals), sub: `${money(s.monthlyGoalContrib)}/mo set aside` })}
+      ${statTile({ label: 'Active savings', value: num(s.counts.savings), sub: `${money(s.monthlySavingsContrib)}/mo set aside` })}
     </div>
   </div>`;
 
@@ -169,6 +169,8 @@ function accountsOverviewRow(data) {
     <div class="stat-grid">
       ${statTile({ label: 'Total cash', value: money(acc.totalCash) })}
       ${statTile({ label: 'Total credit due', value: money(acc.totalCreditOwed) })}
+      ${statTile({ label: 'Balance', value: money(acc.balance), sub: 'Cash minus credit — spendable now' })}
+      ${statTile({ label: 'Net worth', value: money(currentNetWorth(data)), sub: 'Balance plus savings' })}
       ${statTile({ label: 'Incoming this month', value: money(incoming.total), sub: `${incoming.items.length} payment${incoming.items.length === 1 ? '' : 's'}` })}
       ${statTile({ label: 'Due this month', value: money(due.total), sub: `${due.items.length} payment${due.items.length === 1 ? '' : 's'}` })}
     </div>
@@ -201,7 +203,7 @@ function recentTransactionsPanel(data) {
         <td class="cell-muted" data-label="Date">${dateLabel(t.date)}</td>
         <td class="cell-strong" data-label="Description">${escapeHtml(t.description)}</td>
         <td data-label="Category"><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
-        <td class="num ${t.type === 'income' ? 'text-good' : t.type === 'expense' ? 'text-crit' : ''}" data-label="Amount">${t.type === 'expense' ? '−' : t.type === 'income' ? '+' : ''}${money(t.amount)}</td>
+        <td class="num ${t.type === 'income' || (t.type === 'savings' && t.savingDirection === 'withdraw') ? 'text-good' : t.type === 'expense' || (t.type === 'savings' && t.savingDirection === 'contribute') ? 'text-crit' : ''}" data-label="Amount">${t.type === 'expense' || (t.type === 'savings' && t.savingDirection === 'contribute') ? '−' : t.type === 'income' || (t.type === 'savings' && t.savingDirection === 'withdraw') ? '+' : ''}${money(t.amount)}</td>
       </tr>`).join('')}
     </tbody></table></div>
   </div>`;
@@ -439,15 +441,17 @@ function renewalBadge(days) {
   return '';
 }
 
-// ---------------- Goals ----------------
-function goalsListFragment(data) {
-  const list = data.goals || [];
-  const { pageItems, page, totalPages } = paginate('goals', list);
+// ---------------- Savings ----------------
+function savingsListFragment(data) {
+  const list = data.savings || [];
+  const transactions = data.transactions || [];
+  const { pageItems, page, totalPages } = paginate('savings', list);
   return `
-    ${bulkToolbar('goals', pageItems.map(g => g.id))}
+    ${bulkToolbar('savings', pageItems.map(sv => sv.id))}
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
-      ${pageItems.map(g => {
-        const st = goalStatus(g);
+      ${pageItems.map(sv => {
+        const saved = savingBalance(sv, transactions);
+        const st = savingStatus({ ...sv, saved });
         const eta = st.complete ? 'Reached 🎉'
           : Number.isFinite(st.monthsToGoal) ? `~${monthLabel(st.projectedDate)}`
           : 'No monthly amount set';
@@ -456,43 +460,88 @@ function goalsListFragment(data) {
           : '<span class="badge warn">Behind</span>';
         return `<div class="panel">
           <div class="flex between center" style="margin-bottom:2px">
-            <span class="flex center gap-8">${selectCheckbox('goals', g.id)}<h3 style="margin:0">${escapeHtml(g.name)}</h3></span>
-            ${rowActions('goals', g.id)}
+            <span class="flex center gap-8">${selectCheckbox('savings', sv.id)}<h3 style="margin:0">${escapeHtml(sv.name)}</h3></span>
+            ${rowActions('savings', sv.id)}
           </div>
-          <div class="panel-sub">${money(g.saved || 0)} of ${money(g.target)} ${track}</div>
-          ${progressBar(st.progress, { good: st.complete, height: 10 })}
-          <div class="flex between" style="margin-top:12px;font-size:13px">
-            <span class="text-muted">${pct(st.progress, 0)} complete</span>
-            <span>${money(st.remaining)} to go</span>
-          </div>
+          <div class="panel-sub">${st.hasTarget ? `${money(saved)} of ${money(sv.target)}` : `${money(saved)} saved`} ${track}</div>
+          ${st.hasTarget ? `
+            ${progressBar(st.progress, { good: st.complete, height: 10 })}
+            <div class="flex between" style="margin-top:12px;font-size:13px">
+              <span class="text-muted">${pct(st.progress, 0)} complete</span>
+              <span>${money(st.remaining)} to go</span>
+            </div>` : ''}
           <div class="flex between" style="margin-top:6px;font-size:13px">
-            <span class="text-muted">Monthly</span><span>${money(g.monthlyContribution || 0)}</span>
+            <span class="text-muted">Monthly</span><span>${money(sv.monthlyContribution || 0)}</span>
           </div>
-          <div class="flex between" style="margin-top:6px;font-size:13px">
-            <span class="text-muted">Est. completion</span><span>${eta}</span>
-          </div>
-          ${g.deadline ? `<div class="flex between" style="margin-top:6px;font-size:13px"><span class="text-muted">Target date</span><span>${dateLabel(g.deadline)}</span></div>` : ''}
-          ${st.requiredMonthly != null && !st.complete ? `<div class="cell-muted" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">Save <strong>${money(st.requiredMonthly)}</strong>/mo to hit your deadline</div>` : ''}
+          ${st.hasTarget ? `
+            <div class="flex between" style="margin-top:6px;font-size:13px">
+              <span class="text-muted">Est. completion</span><span>${eta}</span>
+            </div>
+            ${sv.deadline ? `<div class="flex between" style="margin-top:6px;font-size:13px"><span class="text-muted">Target date</span><span>${dateLabel(sv.deadline)}</span></div>` : ''}
+            ${st.requiredMonthly != null && !st.complete ? `<div class="cell-muted" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">Save <strong>${money(st.requiredMonthly)}</strong>/mo to hit your deadline</div>` : ''}
+          ` : ''}
         </div>`;
       }).join('')}
     </div>
-    ${paginationBar('goals', page, totalPages)}`;
+    ${paginationBar('savings', page, totalPages)}`;
 }
 
-export function renderGoals(data) {
-  const list = data.goals || [];
-  if (!list.length) return empty('◎', 'No savings goals yet', 'Set targets — an emergency fund, a trip, a deposit — and track progress.', 'goals');
-  const totalTarget = list.reduce((s, g) => s + (Number(g.target) || 0), 0);
-  const totalSaved = list.reduce((s, g) => s + (Number(g.saved) || 0), 0);
-  const monthlyContrib = list.reduce((s, g) => s + (goalStatus(g).complete ? 0 : Number(g.monthlyContribution) || 0), 0);
+function txnSavingsListFragment(data) {
+  const savings = data.savings || [];
+  const accounts = data.accounts || [];
+  const transactions = data.transactions || [];
+  const savingName = id => savings.find(sv => sv.id === id)?.name || '—';
+  const accountName = id => accounts.find(a => a.id === id)?.name || '—';
+  const savingTxns = [...transactions]
+    .filter(t => t.type === 'savings')
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  if (!savingTxns.length) return `<div class="text-muted" style="padding:12px 0">No savings transactions logged yet.</div>`;
+  const { pageItems, page, totalPages } = paginate('txn-savings', savingTxns);
+
+  return `
+    ${bulkDeleteBar('transactions')}
+    <div class="table-wrap"><table class="data">
+      <thead><tr><th style="width:1%">${selectAllCheckbox('transactions', pageItems.map(t => t.id))}</th><th>Date</th><th>Description</th><th>Savings</th><th>Account</th><th>Effect</th><th class="num">Amount</th><th></th></tr></thead>
+      <tbody>
+        ${pageItems.map(t => `<tr>
+          <td>${selectCheckbox('transactions', t.id)}</td>
+          <td class="cell-muted" data-label="Date">${dateLabel(t.date)}</td>
+          <td class="cell-strong" data-label="Description">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
+          <td data-label="Savings">${escapeHtml(savingName(t.savingId))}</td>
+          <td data-label="Account">${escapeHtml(accountName(t.accountId))}</td>
+          <td data-label="Effect"><span class="badge ${t.savingDirection === 'withdraw' ? 'cat' : 'good'}">${t.savingDirection === 'withdraw' ? 'Withdraw' : 'Contribute'}</span></td>
+          <td class="num ${t.savingDirection === 'withdraw' ? 'text-good' : 'text-crit'}" data-label="Amount">${t.savingDirection === 'withdraw' ? '+' : '−'}${money(t.amount)}</td>
+          <td>${rowActions('transactions', t.id)}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+    ${paginationBar('txn-savings', page, totalPages)}`;
+}
+
+export function renderSavings(data) {
+  const list = data.savings || [];
+  if (!list.length) return empty('◎', 'No savings yet', 'Start a savings bucket — with or without a target — and move money into it.', 'savings');
+  const transactions = data.transactions || [];
+  const totalTarget = list.reduce((s, sv) => s + (Number(sv.target) || 0), 0);
+  const totalSaved = list.reduce((s, sv) => s + savingBalance(sv, transactions), 0);
+  const monthlyContrib = list.reduce((s, sv) => s + (savingStatus({ ...sv, saved: savingBalance(sv, transactions) }).complete ? 0 : Number(sv.monthlyContribution) || 0), 0);
+
+  const ledger = `<div class="section">
+    <div class="section-head"><h2>Savings transactions</h2>
+      <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
+    </div>
+    <div id="list-txn-savings">${txnSavingsListFragment(data)}</div>
+  </div>`;
+
   return `
     ${summaryStrip([
       { label: 'Saved so far', value: money(totalSaved, { cents: false }) },
-      { label: 'Total targets', value: money(totalTarget, { cents: false }) },
+      { label: 'Total targets', value: totalTarget > 0 ? money(totalTarget, { cents: false }) : '—' },
       { label: 'Monthly set aside', value: money(monthlyContrib) },
       { label: 'Overall progress', value: totalTarget > 0 ? pct(totalSaved / totalTarget, 0) : '—' },
     ])}
-    <div id="list-goals">${goalsListFragment(data)}</div>`;
+    <div id="list-savings">${savingsListFragment(data)}</div>
+    ${ledger}`;
 }
 
 // ---------------- Pagination (any list) ----------------
@@ -539,12 +588,13 @@ export const LIST_FRAGMENTS = {
   expenses: expensesListFragment,
   installments: installmentsListFragment,
   subscriptions: subscriptionsListFragment,
-  goals: goalsListFragment,
+  savings: savingsListFragment,
   budgets: budgetsListFragment,
   debts: debtsListFragment,
   accounts: accountCardsFragment,
   'txn-accounts': txnAccountsListFragment,
   'txn-debts': txnDebtsListFragment,
+  'txn-savings': txnSavingsListFragment,
 };
 
 // ---------------- Bulk select (any collection) ----------------
@@ -619,6 +669,7 @@ function txnAccountsListFragment(data) {
   const transactions = data.transactions || [];
   const accountName = id => accounts.find(a => a.id === id)?.name || '—';
   const debtName = id => (data.debts || []).find(d => d.id === id)?.person || '—';
+  const savingName = id => (data.savings || []).find(sv => sv.id === id)?.name || '—';
 
   const filtered = accountFilter
     ? transactions.filter(t => t.accountId === accountFilter || t.toAccountId === accountFilter)
@@ -644,8 +695,9 @@ function txnAccountsListFragment(data) {
           <td data-label="Category"><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
           <td data-label="Account">${t.type === 'transfer' ? `${escapeHtml(accountName(t.accountId))} → ${escapeHtml(accountName(t.toAccountId))}`
             : t.type === 'debt' ? `Debt: ${escapeHtml(debtName(t.debtId))}`
+            : t.type === 'savings' ? `${escapeHtml(accountName(t.accountId))} · Savings: ${escapeHtml(savingName(t.savingId))}`
             : escapeHtml(accountName(t.accountId))}</td>
-          <td class="num ${t.type === 'income' ? 'text-good' : t.type === 'expense' ? 'text-crit' : ''}" data-label="Amount">${t.type === 'expense' ? '−' : t.type === 'income' ? '+' : ''}${money(t.amount)}</td>
+          <td class="num ${t.type === 'income' || (t.type === 'savings' && t.savingDirection === 'withdraw') ? 'text-good' : t.type === 'expense' || (t.type === 'savings' && t.savingDirection === 'contribute') ? 'text-crit' : ''}" data-label="Amount">${t.type === 'expense' || (t.type === 'savings' && t.savingDirection === 'contribute') ? '−' : t.type === 'income' || (t.type === 'savings' && t.savingDirection === 'withdraw') ? '+' : ''}${money(t.amount)}</td>
           <td>${rowActions('transactions', t.id)}</td>
         </tr>`).join('')}
       </tbody>
@@ -665,6 +717,8 @@ export function renderAccounts(data) {
   const tiles = `<div class="stat-grid">
     ${clickableStat('cash', 'Total cash', money(s.totalCash))}
     ${clickableStat('credit', 'Total credit due', money(s.totalCreditOwed), s.totalCreditAvailable > 0 ? `${money(s.totalCreditAvailable)} available` : '')}
+    ${statTile({ label: 'Balance', value: money(s.balance), sub: 'Cash minus credit — spendable now' })}
+    ${statTile({ label: 'Net worth', value: money(currentNetWorth(data)), sub: 'Balance plus savings' })}
     ${clickableStat('incoming', 'Incoming this month', money(incoming.total), `${incoming.items.length} payment${incoming.items.length === 1 ? '' : 's'}`)}
     ${clickableStat('due', 'Due this month', money(due.total), `${due.items.length} payment${due.items.length === 1 ? '' : 's'}`)}
   </div>`;
@@ -694,7 +748,7 @@ function renderNetWorthPanel(data) {
   const series = [{ date: null, balance: opening }, ...points];
   return `<div class="panel" style="margin-bottom:24px">
     <h3>Net worth over time</h3>
-    <div class="panel-sub">Cash minus credit owed, from your opening balances through every logged transaction</div>
+    <div class="panel-sub">Cash plus savings minus credit owed, from your opening balances through every logged transaction</div>
     ${lineChart(series)}
   </div>`;
 }

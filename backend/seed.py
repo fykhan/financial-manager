@@ -6,7 +6,7 @@ from datetime import date, timedelta
 
 from sqlmodel import Session
 
-from backend.models import Account, Budget, Debt, Expense, Goal, Income, Installment, Subscription, Transaction
+from backend.models import Account, Budget, Debt, Expense, Income, Installment, Saving, Subscription, Transaction
 
 
 def _uid() -> str:
@@ -61,9 +61,10 @@ def apply_sample(session: Session) -> None:
         Subscription(id=_uid(), name="Gym membership", amount=35, cycle="monthly", category="Health", next_renewal=later_renewal, notes=""),
         Subscription(id=_uid(), name="Cloud storage", amount=100, cycle="annually", category="Software", next_renewal=date(this_year + 1, 3, 10).isoformat(), notes="2TB plan"),
     ])
+    emergency_saving_id, travel_saving_id = _uid(), _uid()
     session.add_all([
-        Goal(id=_uid(), name="Emergency fund", target=10000, saved=2400, monthly_contribution=400, deadline=date(this_year + 1, 12, 31).isoformat(), notes="3–6 months of expenses"),
-        Goal(id=_uid(), name="Travel fund", target=3000, saved=600, monthly_contribution=150, deadline=None, notes=""),
+        Saving(id=emergency_saving_id, name="Emergency fund", target=10000, saved=2400, monthly_contribution=400, deadline=date(this_year + 1, 12, 31).isoformat(), notes="3–6 months of expenses"),
+        Saving(id=travel_saving_id, name="Travel fund", target=3000, saved=600, monthly_contribution=150, deadline=None, notes=""),
     ])
     session.add_all([
         Budget(id=_uid(), category="Housing", monthly_limit=1300, notes=""),
@@ -85,4 +86,5 @@ def apply_sample(session: Session) -> None:
         Transaction(id=_uid(), date=(today - timedelta(days=2)).isoformat(), description="Ride share", amount=18, type="expense", category="Transport", account_id=wallet_id),
         Transaction(id=_uid(), date=(today - timedelta(days=2)).isoformat(), description="Pay off Visa", amount=200, type="transfer", category="Transfer", account_id=checking_id, to_account_id=visa_id),
         Transaction(id=_uid(), date=(today - timedelta(days=1)).isoformat(), description="John paid back $30", amount=30, type="debt", category="Debt", debt_id=john_debt_id, debt_direction="decrease"),
+        Transaction(id=_uid(), date=(today - timedelta(days=7)).isoformat(), description="Move to Emergency fund", amount=200, type="savings", category="Savings", account_id=checking_id, saving_id=emergency_saving_id, saving_direction="contribute"),
     ])

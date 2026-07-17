@@ -2,7 +2,7 @@
 
 import * as store from './store.js';
 import { openModal, closeModal, toast } from './ui.js';
-import { installmentStatus, goalStatus, toMonthly, FREQ_LABELS, amortizedPayment } from './calc.js';
+import { installmentStatus, savingStatus, toMonthly, FREQ_LABELS, amortizedPayment } from './calc.js';
 import { money, todayISO, escapeHtml, titleCase } from './format.js';
 
 const FREQ_OPTIONS = ['weekly', 'biweekly', 'monthly', 'quarterly', 'semiannually', 'annually'];
@@ -12,7 +12,7 @@ const EXPENSE_CATEGORIES = ['Housing', 'Food', 'Transport', 'Health', 'Bills', '
 const SUB_CATEGORIES = ['Entertainment', 'Software', 'Health', 'News', 'Music', 'Cloud', 'Other'];
 
 const ACCOUNT_TYPES = ['checking', 'savings', 'cash', 'wallet', 'credit'];
-const TXN_TYPES = ['expense', 'income', 'transfer', 'debt'];
+const TXN_TYPES = ['expense', 'income', 'transfer', 'debt', 'savings'];
 const TXN_CATEGORIES = ['Housing', 'Food', 'Transport', 'Health', 'Bills', 'Education', 'Entertainment', 'Shopping', 'Personal', 'Savings', 'Income', 'Transfer', 'Debt', 'Other'];
 
 const DEBT_DIRECTIONS = [
@@ -23,10 +23,15 @@ const DEBT_TXN_DIRECTIONS = [
   { value: 'increase', label: "Add to debt (grows what's owed)" },
   { value: 'decrease', label: 'Repayment (reduces what\'s owed)' },
 ];
+const SAVING_TXN_DIRECTIONS = [
+  { value: 'contribute', label: 'Contribute (moves money into savings)' },
+  { value: 'withdraw', label: 'Withdraw (moves money back out)' },
+];
 
 const accountOptions = () => store.getData().accounts.map(a => ({ value: a.id, label: `${a.name} (${titleCase(a.type)})` }));
 const accountOptionsOptional = () => [{ value: '', label: '— none (forecast only) —' }, ...accountOptions()];
 const debtOptions = () => store.getData().debts.map(d => ({ value: d.id, label: `${d.person} (${d.direction === 'owed_by_me' ? 'you owe' : 'owes you'})` }));
+const savingOptions = () => store.getData().savings.map(s => ({ value: s.id, label: s.name }));
 
 // Field schema per collection. Each field: { name, label, type, options?, required?, step?, hint?, half? }
 const SCHEMAS = {
@@ -97,17 +102,17 @@ const SCHEMAS = {
       return null;
     },
   },
-  goals: {
-    title: 'savings goal',
+  savings: {
+    title: 'saving',
     fields: [
-      { name: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Emergency fund' },
-      { name: 'target', label: 'Target amount', type: 'number', required: true, step: '0.01', half: true },
-      { name: 'saved', label: 'Saved so far', type: 'number', step: '0.01', def: 0, half: true },
-      { name: 'monthlyContribution', label: 'Monthly contribution', type: 'number', step: '0.01', def: 0, half: true },
-      { name: 'deadline', label: 'Target date', type: 'date', half: true, hint: 'Optional' },
+      { name: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Emergency fund, or just "Savings"' },
+      { name: 'saved', label: 'Starting balance', type: 'number', step: '0.01', def: 0, half: true, hint: 'Before any transfers logged below' },
+      { name: 'target', label: 'Savings goal', type: 'number', step: '0.01', half: true, hint: 'Optional — leave blank to just track savings' },
+      { name: 'monthlyContribution', label: 'Planned monthly contribution', type: 'number', step: '0.01', def: 0, half: true, hint: 'Optional' },
+      { name: 'deadline', label: 'Target date', type: 'date', half: true, hint: 'Optional', visibleIf: v => !!v.target },
       { name: 'notes', label: 'Notes', type: 'textarea' },
     ],
-    preview: previewGoal,
+    preview: previewSaving,
   },
   accounts: {
     title: 'account',
@@ -131,6 +136,8 @@ const SCHEMAS = {
       { name: 'toAccountId', label: 'To account', type: 'select', options: accountOptions, half: true, hint: 'Transfers only', visibleIf: v => v.type === 'transfer' },
       { name: 'debtId', label: 'Person', type: 'select', options: debtOptions, half: true, visibleIf: v => v.type === 'debt' },
       { name: 'debtDirection', label: 'Effect', type: 'select', options: DEBT_TXN_DIRECTIONS, def: 'increase', half: true, visibleIf: v => v.type === 'debt' },
+      { name: 'savingId', label: 'Savings', type: 'select', options: savingOptions, half: true, visibleIf: v => v.type === 'savings' },
+      { name: 'savingDirection', label: 'Effect', type: 'select', options: SAVING_TXN_DIRECTIONS, def: 'contribute', half: true, visibleIf: v => v.type === 'savings' },
       { name: 'notes', label: 'Notes', type: 'textarea' },
     ],
     validate: v => {
@@ -140,6 +147,10 @@ const SCHEMAS = {
       } else if (v.type === 'debt') {
         if (!v.debtId) return 'Select which debt this affects';
         if (!v.debtDirection) return 'Select whether this adds to or reduces the debt';
+      } else if (v.type === 'savings') {
+        if (!v.savingId) return 'Select which savings entry this affects';
+        if (!v.savingDirection) return 'Select whether this is a contribution or a withdrawal';
+        if (!v.accountId) return 'Account is required';
       } else if (!v.accountId) {
         return 'Account is required';
       }
@@ -243,7 +254,7 @@ export function openForm(collection, id = null) {
     return obj;
   };
 
-  // Live preview for installments / goals.
+  // Live preview for installments / savings.
   const previewEl = document.getElementById('calc-preview');
   const refresh = () => { if (schema.preview && previewEl) previewEl.innerHTML = schema.preview(getValues()); };
   if (schema.preview) { refresh(); form.addEventListener('input', refresh); }
@@ -323,9 +334,9 @@ function previewInstallment(v) {
     <div class="row"><span>Remaining balance</span><strong>${money(st.remainingBalance)}</strong></div>`;
 }
 
-function previewGoal(v) {
-  if (!v.target) return `<div class="text-muted">Enter a target to see your timeline.</div>`;
-  const st = goalStatus(v);
+function previewSaving(v) {
+  if (!v.target) return `<div class="text-muted">No savings goal set — this will just track a running balance as you contribute.</div>`;
+  const st = savingStatus(v);
   const eta = st.monthsToGoal === 0 ? 'Reached 🎉'
     : Number.isFinite(st.monthsToGoal) ? `${st.monthsToGoal} month${st.monthsToGoal === 1 ? '' : 's'}`
     : 'Set a monthly amount';

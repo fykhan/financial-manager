@@ -3,11 +3,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   toMonthly, toYearly, monthsBetween, addMonths, amortizedPayment,
-  installmentStatus, goalStatus, summary, spendingByCategory,
+  installmentStatus, savingStatus, summary, spendingByCategory,
   assessSavingsRate, assessDTI, daysUntil,
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
-  assessBudget, budgetStatus, accountBalanceHistory, netWorthHistory,
-  debtBalance, debtsSummary, dueSoon,
+  assessBudget, budgetStatus, accountBalanceHistory, netWorthHistory, currentNetWorth,
+  debtBalance, debtsSummary, savingBalance, dueSoon,
 } from '../public/js/calc.js';
 
 const approx = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -83,25 +83,34 @@ test('installmentStatus marks a finished loan inactive', () => {
   approx(st.remainingBalance, 0);
 });
 
-test('goalStatus projects months and tracks deadline feasibility', () => {
+test('savingStatus projects months and tracks deadline feasibility', () => {
   const g = { target: 10000, saved: 2400, monthlyContribution: 400, deadline: '' };
-  const st = goalStatus(g, '2026-07-15');
+  const st = savingStatus(g, '2026-07-15');
   approx(st.remaining, 7600);
   assert.equal(st.monthsToGoal, 19); // ceil(7600/400)
   assert.equal(st.complete, false);
 
-  const done = goalStatus({ target: 1000, saved: 1000, monthlyContribution: 0 }, '2026-07-15');
+  const done = savingStatus({ target: 1000, saved: 1000, monthlyContribution: 0 }, '2026-07-15');
   assert.equal(done.complete, true);
   assert.equal(done.monthsToGoal, 0);
 
-  const noContrib = goalStatus({ target: 1000, saved: 0, monthlyContribution: 0 }, '2026-07-15');
+  const noContrib = savingStatus({ target: 1000, saved: 0, monthlyContribution: 0 }, '2026-07-15');
   assert.equal(noContrib.monthsToGoal, Infinity);
 });
 
-test('goalStatus flags behind-schedule against a deadline', () => {
-  const behind = goalStatus({ target: 12000, saved: 0, monthlyContribution: 100, deadline: '2027-07-15' }, '2026-07-15');
+test('savingStatus with no target set has nothing to project and is never complete', () => {
+  const st = savingStatus({ saved: 500, monthlyContribution: 100 }, '2026-07-15');
+  assert.equal(st.hasTarget, false);
+  assert.equal(st.remaining, null);
+  assert.equal(st.progress, null);
+  assert.equal(st.monthsToGoal, null);
+  assert.equal(st.complete, false);
+});
+
+test('savingStatus flags behind-schedule against a deadline', () => {
+  const behind = savingStatus({ target: 12000, saved: 0, monthlyContribution: 100, deadline: '2027-07-15' }, '2026-07-15');
   assert.equal(behind.onTrack, false); // needs 1000/mo, only saving 100
-  const ahead = goalStatus({ target: 1200, saved: 0, monthlyContribution: 200, deadline: '2027-07-15' }, '2026-07-15');
+  const ahead = savingStatus({ target: 1200, saved: 0, monthlyContribution: 200, deadline: '2027-07-15' }, '2026-07-15');
   assert.equal(ahead.onTrack, true);
 });
 
@@ -111,14 +120,14 @@ test('summary aggregates the whole picture', () => {
     expenses: [{ amount: 1200, frequency: 'monthly', category: 'Housing' }],
     subscriptions: [{ amount: 12, cycle: 'monthly', category: 'Fun' }],
     installments: [{ principal: 1200, monthlyPayment: 100, termMonths: 12, startDate: '2026-06-15', apr: 0 }],
-    goals: [{ target: 5000, saved: 0, monthlyContribution: 300 }],
+    savings: [{ target: 5000, saved: 0, monthlyContribution: 300 }],
   };
   const s = summary(data, '2026-07-15');
   approx(s.monthlyIncome, 3900);
   approx(s.monthlyDebt, 100);
   approx(s.monthlyExpenses, 1200 + 12 + 100);
   approx(s.netCashFlow, 3900 - 1312);
-  approx(s.leftoverAfterGoals, 3900 - 1312 - 300);
+  approx(s.leftoverAfterSavings, 3900 - 1312 - 300);
   approx(s.savingsRate, (3900 - 1312) / 3900, 0.001);
   approx(s.dti, 100 / 3900, 0.001);
   assert.equal(s.counts.activeInstallments, 1);
@@ -260,6 +269,15 @@ test('accountBalance: transfer between two depository accounts (wallet top-up)',
   approx(accountBalance(wallet, txns), 120);
 });
 
+test('accountBalance: a savings contribution debits the account, a withdrawal credits it back', () => {
+  const checking = { id: 'a1', type: 'checking', balance: 1000 };
+  const txns = [
+    { accountId: 'a1', type: 'savings', savingId: 's1', savingDirection: 'contribute', amount: 200 },
+    { accountId: 'a1', type: 'savings', savingId: 's1', savingDirection: 'withdraw', amount: 50 },
+  ];
+  approx(accountBalance(checking, txns), 1000 - 200 + 50);
+});
+
 test('accountsSummary rolls up cash, credit owed, and available credit', () => {
   const data = {
     accounts: [
@@ -275,7 +293,7 @@ test('accountsSummary rolls up cash, credit owed, and available credit', () => {
   approx(s.totalCash, 1050);
   approx(s.totalCreditOwed, 300);
   approx(s.totalCreditAvailable, 1700);
-  approx(s.netWorth, 1050 - 300);
+  approx(s.balance, 1050 - 300);
 });
 
 test('paymentsDueThisMonth includes dated renewals, active installments, and monthly-or-more expenses', () => {
@@ -435,6 +453,34 @@ test('netWorthHistory moves on income/expense and compounds day over day', () =>
   assert.equal(points.length, 2);
   approx(points[0].balance, 1500);
   approx(points[1].balance, 1300);
+});
+
+test('netWorthHistory: savings opening balances count toward the total, and a contribution never moves the line', () => {
+  const data = {
+    accounts: [{ id: 'a1', type: 'checking', balance: 1000 }],
+    savings: [{ id: 's1', name: 'Emergency fund', saved: 300 }],
+    transactions: [
+      { accountId: 'a1', type: 'savings', savingId: 's1', savingDirection: 'contribute', amount: 150, date: '2026-07-05' },
+    ],
+  };
+  const { opening, points } = netWorthHistory(data);
+  approx(opening, 1000 + 300); // cash + savings, no credit
+  assert.equal(points.length, 0); // the contribution just moves cash into savings -> total unchanged
+});
+
+test('currentNetWorth returns the opening total when there are no movement points', () => {
+  const data = { accounts: [{ id: 'a1', type: 'checking', balance: 800 }], savings: [{ id: 's1', saved: 200 }] };
+  approx(currentNetWorth(data), 1000);
+});
+
+test('savingBalance grows on contribute and shrinks on withdraw, on top of the opening saved amount', () => {
+  const saving = { id: 's1', saved: 300 };
+  const txns = [
+    { type: 'savings', savingId: 's1', savingDirection: 'contribute', amount: 200 },
+    { type: 'savings', savingId: 's1', savingDirection: 'withdraw', amount: 50 },
+    { type: 'savings', savingId: 'other', savingDirection: 'contribute', amount: 999 }, // unrelated, ignored
+  ];
+  approx(savingBalance(saving, txns), 300 + 200 - 50);
 });
 
 test('debtBalance grows on increase and shrinks on decrease, regardless of direction', () => {

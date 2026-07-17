@@ -85,12 +85,15 @@ class Subscription(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_now)
 
 
-class Goal(SQLModel, table=True):
+class Saving(SQLModel, table=True):
+    # Table name kept as "goals" (pre-existing schema) even though the
+    # app-facing name is "savings" — avoids an unmigrated rename orphaning
+    # any rows already written under the old name.
     __tablename__ = "goals"
 
     id: str = Field(primary_key=True)
     name: str
-    target: float
+    target: float | None = Field(default=None)  # optional savings goal — savings don't require one
     saved: float = Field(default=0)
     monthly_contribution: float = Field(default=0)
     deadline: str | None = Field(default=None)
@@ -147,6 +150,13 @@ class Transaction(SQLModel, table=True):
     # 'decrease' the outstanding amount, regardless of which way the debt runs).
     debt_id: str | None = Field(default=None)
     debt_direction: str | None = Field(default=None)
+    # Savings transactions ('savings' type) move real money between account_id
+    # and a savings bucket: saving_direction 'contribute' debits the account
+    # and grows the saving's `saved` total, 'withdraw' credits the account
+    # back and shrinks it — so a contribution actually leaves cash-on-hand,
+    # unlike a debt transaction.
+    saving_id: str | None = Field(default=None)
+    saving_direction: str | None = Field(default=None)
     notes: str = Field(default="")
     created_at: datetime = Field(default_factory=_now)
 

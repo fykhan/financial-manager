@@ -162,25 +162,25 @@ class SubscriptionPatch(CamelModel):
     _blank_renewal = field_validator("next_renewal", "account_id", mode="before")(_blank_to_none)
 
 
-# ---- goals ----
+# ---- savings ----
 
-class GoalIn(CamelModel):
+class SavingIn(CamelModel):
     id: str
     name: str
-    target: float
+    target: float | None = None  # optional savings goal — savings don't require one
     saved: float = 0
     monthly_contribution: float = 0
     deadline: str | None = None
     notes: str = ""
 
-    _blank_deadline = field_validator("deadline", mode="before")(_blank_to_none)
+    _blank_fields = field_validator("target", "deadline", mode="before")(_blank_to_none)
 
 
-class GoalOut(GoalIn):
+class SavingOut(SavingIn):
     created_at: datetime
 
 
-class GoalPatch(CamelModel):
+class SavingPatch(CamelModel):
     name: str | None = None
     target: float | None = None
     saved: float | None = None
@@ -188,7 +188,7 @@ class GoalPatch(CamelModel):
     deadline: str | None = None
     notes: str | None = None
 
-    _blank_deadline = field_validator("deadline", mode="before")(_blank_to_none)
+    _blank_fields = field_validator("target", "deadline", mode="before")(_blank_to_none)
 
 
 # ---- budgets ----
@@ -271,10 +271,12 @@ class TransactionIn(CamelModel):
     to_account_id: str | None = None
     debt_id: str | None = None
     debt_direction: str | None = None
+    saving_id: str | None = None
+    saving_direction: str | None = None
     notes: str = ""
 
     _blank_accounts = field_validator(
-        "account_id", "to_account_id", "debt_id", "debt_direction", mode="before",
+        "account_id", "to_account_id", "debt_id", "debt_direction", "saving_id", "saving_direction", mode="before",
     )(_blank_to_none)
 
 
@@ -292,10 +294,12 @@ class TransactionPatch(CamelModel):
     to_account_id: str | None = None
     debt_id: str | None = None
     debt_direction: str | None = None
+    saving_id: str | None = None
+    saving_direction: str | None = None
     notes: str | None = None
 
     _blank_accounts = field_validator(
-        "account_id", "to_account_id", "debt_id", "debt_direction", mode="before",
+        "account_id", "to_account_id", "debt_id", "debt_direction", "saving_id", "saving_direction", mode="before",
     )(_blank_to_none)
 
 
@@ -306,7 +310,7 @@ class FullData(CamelModel):
     expenses: list[ExpenseOut] = Field(default_factory=list)
     installments: list[InstallmentOut] = Field(default_factory=list)
     subscriptions: list[SubscriptionOut] = Field(default_factory=list)
-    goals: list[GoalOut] = Field(default_factory=list)
+    savings: list[SavingOut] = Field(default_factory=list)
     accounts: list[AccountOut] = Field(default_factory=list)
     transactions: list[TransactionOut] = Field(default_factory=list)
     budgets: list[BudgetOut] = Field(default_factory=list)

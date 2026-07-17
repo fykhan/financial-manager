@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 from backend.auth import require_auth
 from backend.db import get_session
 from backend import recurring, seed
-from backend.models import Account, Budget, Debt, Expense, Goal, Income, Installment, Settings, Subscription, Transaction
+from backend.models import Account, Budget, Debt, Expense, Income, Installment, Saving, Settings, Subscription, Transaction
 from backend.schemas import (
     AccountIn,
     AccountOut,
@@ -19,15 +19,15 @@ from backend.schemas import (
     ExpenseOut,
     ExpensePatch,
     FullData,
-    GoalIn,
-    GoalOut,
-    GoalPatch,
     IncomeIn,
     IncomeOut,
     IncomePatch,
     InstallmentIn,
     InstallmentOut,
     InstallmentPatch,
+    SavingIn,
+    SavingOut,
+    SavingPatch,
     SettingsOut,
     SettingsPatch,
     SubscriptionIn,
@@ -46,7 +46,7 @@ COLLECTIONS = {
     "expenses": (Expense, ExpenseIn, ExpenseOut, ExpensePatch),
     "installments": (Installment, InstallmentIn, InstallmentOut, InstallmentPatch),
     "subscriptions": (Subscription, SubscriptionIn, SubscriptionOut, SubscriptionPatch),
-    "goals": (Goal, GoalIn, GoalOut, GoalPatch),
+    "savings": (Saving, SavingIn, SavingOut, SavingPatch),
     "accounts": (Account, AccountIn, AccountOut, AccountPatch),
     "transactions": (Transaction, TransactionIn, TransactionOut, TransactionPatch),
     "budgets": (Budget, BudgetIn, BudgetOut, BudgetPatch),
@@ -72,7 +72,7 @@ def _snapshot(session: Session) -> FullData:
         expenses=[ExpenseOut.model_validate(r) for r in session.exec(select(Expense)).all()],
         installments=[InstallmentOut.model_validate(r) for r in session.exec(select(Installment)).all()],
         subscriptions=[SubscriptionOut.model_validate(r) for r in session.exec(select(Subscription)).all()],
-        goals=[GoalOut.model_validate(r) for r in session.exec(select(Goal)).all()],
+        savings=[SavingOut.model_validate(r) for r in session.exec(select(Saving)).all()],
         accounts=[AccountOut.model_validate(r) for r in session.exec(select(Account)).all()],
         transactions=[TransactionOut.model_validate(r) for r in session.exec(select(Transaction)).all()],
         budgets=[BudgetOut.model_validate(r) for r in session.exec(select(Budget)).all()],
@@ -81,7 +81,7 @@ def _snapshot(session: Session) -> FullData:
 
 
 def _wipe(session: Session) -> None:
-    for Model in (Income, Expense, Installment, Subscription, Goal, Transaction, Account, Budget, Debt):
+    for Model in (Income, Expense, Installment, Subscription, Saving, Transaction, Account, Budget, Debt):
         for row in session.exec(select(Model)).all():
             session.delete(row)
 
@@ -154,7 +154,7 @@ def import_data(body: dict, session: Session = Depends(get_session)):
     session.add_all(Expense(**r.model_dump(exclude={"created_at"})) for r in parsed.expenses)
     session.add_all(Installment(**r.model_dump(exclude={"created_at"})) for r in parsed.installments)
     session.add_all(Subscription(**r.model_dump(exclude={"created_at"})) for r in parsed.subscriptions)
-    session.add_all(Goal(**r.model_dump(exclude={"created_at"})) for r in parsed.goals)
+    session.add_all(Saving(**r.model_dump(exclude={"created_at"})) for r in parsed.savings)
     session.add_all(Account(**r.model_dump(exclude={"created_at"})) for r in parsed.accounts)
     session.add_all(Transaction(**r.model_dump(exclude={"created_at"})) for r in parsed.transactions)
     session.add_all(Budget(**r.model_dump(exclude={"created_at"})) for r in parsed.budgets)

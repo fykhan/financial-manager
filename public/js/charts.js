@@ -98,7 +98,7 @@ export function compareBars(rows, { format = money } = {}) {
   </div>`;
 }
 
-/** A single labelled progress bar (for goals / installment payoff). */
+/** A single labelled progress bar (for savings / installment payoff). */
 export function progressBar(fraction, { good = false, height = 8 } = {}) {
   const w = Math.max(0, Math.min(1, fraction)) * 100;
   return `<div class="progress ${good ? 'good' : ''}" style="height:${height}px"><span style="width:${w}%"></span></div>`;

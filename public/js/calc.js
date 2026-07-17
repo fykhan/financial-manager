@@ -126,39 +126,46 @@ export function daysUntil(iso, refISO) {
   return Math.round((target - ref) / 86400000);
 }
 
-/** Goal projection: months to reach target at the current contribution rate. */
-export function goalStatus(goal, refISO) {
-  const target = Number(goal.target) || 0;
-  const saved = Math.min(Number(goal.saved) || 0, target || Infinity);
-  const monthly = Number(goal.monthlyContribution) || 0;
-  const remaining = Math.max(0, target - saved);
-  const progress = target > 0 ? Math.min(1, saved / target) : 0;
-  const monthsToGoal = remaining <= 0 ? 0 : (monthly > 0 ? Math.ceil(remaining / monthly) : Infinity);
+/**
+ * Savings projection: months to reach an (optional) target at the current
+ * contribution rate. A saving with no target set is just a bucket money gets
+ * moved into — there's no remaining/progress/ETA to project, so those come
+ * back null and it's never "complete".
+ */
+export function savingStatus(saving, refISO) {
+  const hasTarget = Number(saving.target) > 0;
+  const target = hasTarget ? Number(saving.target) : 0;
+  const saved = hasTarget ? Math.min(Number(saving.saved) || 0, target) : (Number(saving.saved) || 0);
+  const monthly = Number(saving.monthlyContribution) || 0;
+  const remaining = hasTarget ? Math.max(0, target - saved) : null;
+  const progress = hasTarget ? Math.min(1, saved / target) : null;
+  const monthsToGoal = !hasTarget ? null : (remaining <= 0 ? 0 : (monthly > 0 ? Math.ceil(remaining / monthly) : Infinity));
   const projectedDate = Number.isFinite(monthsToGoal)
     ? addMonths(refISO || new Date().toISOString().slice(0, 10), monthsToGoal)
     : null;
 
   // Are we on track for a user-set deadline?
   let onTrack = null, requiredMonthly = null;
-  if (goal.deadline) {
-    const monthsLeft = Math.max(0, monthsBetween(refISO || new Date().toISOString().slice(0, 10), goal.deadline));
+  if (hasTarget && saving.deadline) {
+    const monthsLeft = Math.max(0, monthsBetween(refISO || new Date().toISOString().slice(0, 10), saving.deadline));
     requiredMonthly = monthsLeft > 0 ? remaining / monthsLeft : remaining;
     onTrack = remaining <= 0 ? true : monthly >= requiredMonthly - 0.5;
   }
 
-  return { remaining, progress, monthsToGoal, projectedDate, onTrack, requiredMonthly, complete: remaining <= 0 };
+  return { hasTarget, remaining, progress, monthsToGoal, projectedDate, onTrack, requiredMonthly, complete: hasTarget && remaining <= 0 };
 }
 
 /**
  * Aggregate every record into a single monthly financial summary.
- * data = { income[], expenses[], subscriptions[], installments[], goals[] }
+ * data = { income[], expenses[], subscriptions[], installments[], savings[] }
  */
 export function summary(data, refISO) {
   const income = data.income || [];
   const expenses = data.expenses || [];
   const subscriptions = data.subscriptions || [];
   const installments = data.installments || [];
-  const goals = data.goals || [];
+  const savings = data.savings || [];
+  const transactions = data.transactions || [];
 
   const monthlyIncome = income.reduce((s, i) => s + toMonthly(i.amount, i.frequency), 0);
 
@@ -171,14 +178,14 @@ export function summary(data, refISO) {
   const monthlyDebt = activeInstallments.reduce((s, x) => s + x.st.monthlyPayment, 0);
   const totalDebtRemaining = installments.reduce((s, it) => s + installmentStatus(it, refISO).remainingBalance, 0);
 
-  const monthlyGoalContrib = goals.reduce((s, g) => {
-    const st = goalStatus(g, refISO);
+  const monthlySavingsContrib = savings.reduce((s, g) => {
+    const st = savingStatus({ ...g, saved: savingBalance(g, transactions) }, refISO);
     return s + (st.complete ? 0 : (Number(g.monthlyContribution) || 0));
   }, 0);
 
   const monthlyExpenses = monthlyRecurringExpenses + monthlySubscriptions + monthlyDebt;
   const netCashFlow = monthlyIncome - monthlyExpenses;
-  const leftoverAfterGoals = netCashFlow - monthlyGoalContrib;
+  const leftoverAfterSavings = netCashFlow - monthlySavingsContrib;
 
   const savingsRate = monthlyIncome > 0 ? netCashFlow / monthlyIncome : 0;
   const dti = monthlyIncome > 0 ? monthlyDebt / monthlyIncome : 0;
@@ -189,9 +196,9 @@ export function summary(data, refISO) {
     monthlyRecurringExpenses,
     monthlySubscriptions,
     monthlyDebt,
-    monthlyGoalContrib,
+    monthlySavingsContrib,
     netCashFlow,
-    leftoverAfterGoals,
+    leftoverAfterSavings,
     savingsRate,
     dti,
     totalDebtRemaining,
@@ -203,7 +210,7 @@ export function summary(data, refISO) {
       subscriptions: subscriptions.length,
       installments: installments.length,
       activeInstallments: activeInstallments.length,
-      goals: goals.length,
+      savings: savings.length,
     },
   };
 }
@@ -295,7 +302,9 @@ export function assessDTI(dti) {
  * Cash-flow effect of one transaction on a given account, from the account's
  * own point of view (ignoring credit-vs-depository sign flip — see
  * accountBalance). Expense/income only count against their own accountId;
- * transfers count against both sides.
+ * transfers count against both sides. A savings transaction counts like an
+ * expense (contribute) or income (withdraw) against its accountId — see
+ * savingBalance for the matching effect on the saving's own total.
  */
 function literalDelta(t, accountId) {
   const amt = Number(t.amount) || 0;
@@ -307,6 +316,7 @@ function literalDelta(t, accountId) {
   if (t.accountId !== accountId) return 0;
   if (t.type === 'income') return amt;
   if (t.type === 'expense') return -amt;
+  if (t.type === 'savings') return t.savingDirection === 'withdraw' ? amt : -amt;
   return 0;
 }
 
@@ -352,15 +362,20 @@ export function accountBalanceHistory(account, transactions) {
 }
 
 /**
- * Chronological net worth (total cash − total credit owed) across every
- * account. A transfer between two of the user's own accounts — including
- * paying down a credit card from a bank account — never changes net worth
- * by construction, so only income/expense transactions move the line.
+ * Chronological net worth (total cash + total savings − total credit owed)
+ * across everything the user owns. Savings count toward net worth because
+ * it's still their money, just earmarked — a transfer between two of the
+ * user's own accounts, paying down a credit card, or a savings contribution/
+ * withdrawal all move money between buckets that are each already counted
+ * here, so by construction none of them change the total — only income and
+ * expense transactions actually move the line.
  */
 export function netWorthHistory(data) {
   const accounts = data.accounts || [];
+  const savings = data.savings || [];
   const transactions = data.transactions || [];
-  const opening = accounts.reduce((s, a) => s + (Number(a.balance) || 0) * (a.type === 'credit' ? -1 : 1), 0);
+  const opening = accounts.reduce((s, a) => s + (Number(a.balance) || 0) * (a.type === 'credit' ? -1 : 1), 0)
+    + savings.reduce((s, sv) => s + (Number(sv.saved) || 0), 0);
 
   const sorted = [...transactions].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const points = [];
@@ -369,7 +384,7 @@ export function netWorthHistory(data) {
   while (i < sorted.length) {
     const day = sorted[i].date;
     let dayDelta = 0;
-    let moved = false; // a day with only transfers doesn't touch net worth at all
+    let moved = false; // a day with only transfers/savings moves doesn't touch net worth at all
     while (i < sorted.length && sorted[i].date === day) {
       const t = sorted[i];
       if (t.type === 'income') { dayDelta += Number(t.amount) || 0; moved = true; }
@@ -382,6 +397,12 @@ export function netWorthHistory(data) {
     }
   }
   return { opening, points };
+}
+
+/** Just the current (most recent) point of netWorthHistory, as a single number. */
+export function currentNetWorth(data) {
+  const { opening, points } = netWorthHistory(data);
+  return points.length ? points[points.length - 1].balance : opening;
 }
 
 /**
@@ -399,6 +420,19 @@ export function debtBalance(debt, transactions) {
   return (Number(debt.amount) || 0) + delta;
 }
 
+/**
+ * Current saved amount for one saving: its opening `saved` plus every
+ * 'savings' transaction logged against it. 'contribute' grows it, 'withdraw'
+ * shrinks it — the mirror image of the debit/credit literalDelta applies to
+ * the linked account, so the money is never double-counted, only moved.
+ */
+export function savingBalance(saving, transactions) {
+  const delta = (transactions || [])
+    .filter(t => t.type === 'savings' && t.savingId === saving.id)
+    .reduce((s, t) => s + (t.savingDirection === 'withdraw' ? -(Number(t.amount) || 0) : (Number(t.amount) || 0)), 0);
+  return (Number(saving.saved) || 0) + delta;
+}
+
 /** Roll every debt into what's owed to you vs. what you owe others. */
 export function debtsSummary(data) {
   const debts = data.debts || [];
@@ -412,7 +446,13 @@ export function debtsSummary(data) {
   return { totalOwedToMe, totalOwedByMe, net: totalOwedToMe - totalOwedByMe };
 }
 
-/** Roll every account into cash-on-hand / credit-owed / credit-available / net worth. */
+/**
+ * Roll every account into cash-on-hand / credit-owed / credit-available /
+ * balance. `balance` is spendable money (cash minus credit owed) — it
+ * excludes savings, since that cash has been earmarked and moved out of the
+ * accounts (see literalDelta's 'savings' handling). For total net worth,
+ * which does count savings, see netWorthHistory.
+ */
 export function accountsSummary(data) {
   const accounts = data.accounts || [];
   const transactions = data.transactions || [];
@@ -430,7 +470,7 @@ export function accountsSummary(data) {
     totalCash,
     totalCreditOwed,
     totalCreditAvailable: Math.max(0, totalCreditLimit - totalCreditOwed),
-    netWorth: totalCash - totalCreditOwed,
+    balance: totalCash - totalCreditOwed,
   };
 }
 

@@ -10,7 +10,7 @@ const emptyData = () => ({
   expenses: [],
   installments: [],
   subscriptions: [],
-  goals: [],
+  savings: [],
   accounts: [],
   transactions: [],
   budgets: [],
@@ -36,7 +36,7 @@ function normalize(parsed) {
     expenses: parsed.expenses || [],
     installments: parsed.installments || [],
     subscriptions: parsed.subscriptions || [],
-    goals: parsed.goals || [],
+    savings: parsed.savings || [],
     accounts: parsed.accounts || [],
     transactions: parsed.transactions || [],
     budgets: parsed.budgets || [],
@@ -78,7 +78,7 @@ export function updateSettings(patchObj) {
   );
 }
 
-const COLLECTIONS = ['income', 'expenses', 'installments', 'subscriptions', 'goals', 'accounts', 'transactions', 'budgets', 'debts'];
+const COLLECTIONS = ['income', 'expenses', 'installments', 'subscriptions', 'savings', 'accounts', 'transactions', 'budgets', 'debts'];
 
 export function add(collection, record) {
   if (!COLLECTIONS.includes(collection)) throw new Error('bad collection ' + collection);
@@ -168,7 +168,7 @@ export function exportCSV() {
   data.expenses.forEach(e => rows.push(['Expense', e.name, e.category, e.amount, e.frequency, '', e.notes || '']));
   data.subscriptions.forEach(s => rows.push(['Subscription', s.name, s.category || '', s.amount, s.cycle, `next: ${s.nextRenewal || ''}`, s.notes || '']));
   data.installments.forEach(it => rows.push(['Installment', it.name, '', it.monthlyPayment, 'monthly', `principal: ${it.principal}, term: ${it.termMonths}mo, apr: ${it.apr || 0}%, start: ${it.startDate || ''}`, it.notes || '']));
-  data.goals.forEach(g => rows.push(['Goal', g.name, '', g.target, '', `saved: ${g.saved}, monthly: ${g.monthlyContribution}, deadline: ${g.deadline || ''}`, g.notes || '']));
+  data.savings.forEach(sv => rows.push(['Saving', sv.name, '', sv.target ?? '', '', `saved: ${sv.saved}, monthly: ${sv.monthlyContribution}, deadline: ${sv.deadline || ''}`, sv.notes || '']));
   data.accounts.forEach(a => rows.push(['Account', a.name, a.type, a.balance, '', a.creditLimit ? `limit: ${a.creditLimit}` : '', a.notes || '']));
   data.transactions.forEach(t => rows.push(['Transaction', t.description, t.category || '', t.amount, t.type, t.type === 'transfer' ? `from: ${t.accountId}, to: ${t.toAccountId}` : `account: ${t.accountId}`, t.notes || '']));
   data.budgets.forEach(b => rows.push(['Budget', b.category, b.category, b.monthlyLimit, 'monthly', '', b.notes || '']));

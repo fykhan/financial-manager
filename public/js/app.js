@@ -6,7 +6,7 @@ import { initModalChrome, openModal, closeModal, toast, confirmDialog, download 
 import { openForm } from './forms.js';
 import {
   viewTitle, renderDashboard, renderIncome, renderExpenses,
-  renderInstallments, renderSubscriptions, renderGoals, renderAccounts, renderDebts,
+  renderInstallments, renderSubscriptions, renderSavings, renderAccounts, renderDebts,
   setAccountFilter, clearAccountFilter, renderDrillDown, drillDownTitle,
   toggleSelect, selectAll, clearSelection, clearAllSelections, getSelectedIds,
   setPage, resetAllPages, LIST_FRAGMENTS, setSpendMode,
@@ -18,7 +18,7 @@ const RENDERERS = {
   expenses: renderExpenses,
   installments: renderInstallments,
   subscriptions: renderSubscriptions,
-  goals: renderGoals,
+  savings: renderSavings,
   accounts: renderAccounts,
   debts: renderDebts,
 };
@@ -110,7 +110,7 @@ function openDataMenu() {
         try { await store.loadSample(); toast('Sample data loaded', 'good'); closeModal(); render(); } catch { /* store.js already toasted */ }
       }
     } else if (act === 'reset') {
-      if (await confirmDialog('Erase everything?', 'All your income, expenses, installments, subscriptions and goals will be permanently deleted.', { okLabel: 'Erase all' })) {
+      if (await confirmDialog('Erase everything?', 'All your income, expenses, installments, subscriptions and savings will be permanently deleted.', { okLabel: 'Erase all' })) {
         try { await store.resetAll(); toast('All data erased', ''); closeModal(); render(); } catch { /* store.js already toasted */ }
       }
     }
