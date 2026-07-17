@@ -9,6 +9,7 @@ import {
   renderInstallments, renderSubscriptions, renderGoals, renderAccounts, renderDebts,
   setAccountFilter, clearAccountFilter, renderDrillDown, drillDownTitle,
   toggleSelect, selectAll, clearSelection, clearAllSelections, getSelectedIds,
+  setPage, resetAllPages, LIST_FRAGMENTS,
 } from './views.js';
 
 const RENDERERS = {
@@ -42,6 +43,7 @@ function navigate(view) {
   if (!RENDERERS[view]) return;
   clearAccountFilter();
   clearAllSelections();
+  resetAllPages();
   current = view;
   location.hash = view;
   render();
@@ -171,6 +173,7 @@ function wire() {
     const selectAllBox = e.target.closest('[data-select-all]');
     const selectBox = e.target.closest('[data-select]');
     const bulkDeleteBtn = e.target.closest('[data-bulk-delete]');
+    const pageNavBtn = e.target.closest('[data-page-nav]');
     const accountCard = e.target.closest('[data-account-card]');
 
     // Order matters: edit/delete/select controls are nested inside the
@@ -215,6 +218,15 @@ function wire() {
           toast('Deleted', '');
         } catch { /* store.js already toasted individual failures */ }
       }
+      return;
+    }
+    if (pageNavBtn) {
+      // Patches only this list's own container — not a full page render.
+      const [key, pageStr] = pageNavBtn.dataset.pageNav.split(':');
+      setPage(key, parseInt(pageStr, 10));
+      const container = document.getElementById(`list-${key}`);
+      const renderFragment = LIST_FRAGMENTS[key];
+      if (container && renderFragment) container.innerHTML = renderFragment(store.getData());
       return;
     }
     if (accountCard) { setAccountFilter(accountCard.dataset.accountCard); return render(); }

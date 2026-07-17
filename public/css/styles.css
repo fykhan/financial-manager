@@ -358,6 +358,17 @@ textarea.input { resize: vertical; min-height: 64px; }
 .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
 .stat {
   position: relative;
+  /* Grid items default to min-width:auto, which floors their shrinkage at
+     the widest unbreakable content (a long "$12,480.25"). Without this,
+     a big amount can force the tile — and the whole grid track — wider
+     than the auto-fit column was supposed to allow, pushing text (or the
+     tile itself) past the edge instead of the font ever getting a chance
+     to shrink. */
+  min-width: 0;
+  /* Lets .stat-value below query THIS tile's own rendered width (cqi),
+     not the viewport's — the two can differ a lot once auto-fit is
+     packing a different number of columns into the same screen width. */
+  container-type: inline-size;
   background: var(--surface-1); backdrop-filter: blur(10px);
   border: 1px solid var(--border);
   border-top: 2px solid var(--accent-2);
@@ -371,15 +382,18 @@ textarea.input { resize: vertical; min-height: 64px; }
 .stat-label {
   color: var(--text-2); font-size: 11px; font-weight: 400;
   letter-spacing: 0.1em; text-transform: uppercase;
-  display: flex; align-items: center; gap: 7px;
+  display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
 }
 .stat-value {
-  font-family: var(--font-head); font-weight: 700; font-size: 26px;
-  letter-spacing: 0.01em; margin-top: 8px; line-height: 1.1;
+  font-family: var(--font-head); font-weight: 700;
+  font-size: 22px; /* static fallback for browsers without container query units */
+  font-size: clamp(15px, 9cqi, 26px);
+  letter-spacing: 0.01em; margin-top: 8px; line-height: 1.15;
   color: var(--text-1); text-shadow: 0 0 12px rgba(0, 255, 136, 0.3);
+  overflow-wrap: anywhere; /* last-resort safety net: wrap rather than overflow */
 }
 .stat-value.tabular { font-variant-numeric: tabular-nums; }
-.stat-sub { font-size: 12px; color: var(--muted); margin-top: 5px; letter-spacing: 0.03em; }
+.stat-sub { font-size: 12px; color: var(--muted); margin-top: 5px; letter-spacing: 0.03em; overflow-wrap: anywhere; }
 .stat-sub.pos { color: var(--good-text); text-shadow: 0 0 8px rgba(0, 255, 159, 0.4); }
 .stat-sub.neg { color: var(--critical); text-shadow: 0 0 8px rgba(255, 46, 99, 0.4); }
 .stat .dot { width: 9px; height: 9px; display: inline-block; box-shadow: 0 0 8px currentColor; }
@@ -530,6 +544,13 @@ table.data tr:hover td { background: rgba(255, 0, 255, 0.07); }
 .calc-preview .row { display: flex; justify-content: space-between; padding: 3px 0; }
 .calc-preview .row strong { font-variant-numeric: tabular-nums; color: var(--accent-2); }
 
+/* ---------- Pagination ---------- */
+.pagination {
+  display: flex; align-items: center; justify-content: center; gap: 16px;
+  margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-2);
+}
+.pagination-info { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; white-space: nowrap; }
+
 /* ---------- Toast ---------- */
 .toast-host { position: fixed; bottom: 22px; right: 22px; display: flex; flex-direction: column; gap: 10px; z-index: 60; }
 .toast {
@@ -619,7 +640,6 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2
   table.data .row-actions { justify-content: flex-start; width: 100%; }
 }
 @media (max-width: 520px) {
-  .stat-value { font-size: 21px; }
   :root { --chamfer: 7px; }
   .topbar { gap: 8px; }
   .topbar-actions { gap: 6px; }
