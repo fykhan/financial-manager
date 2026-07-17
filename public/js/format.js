@@ -1,17 +1,13 @@
 // format.js — currency / date / number formatting helpers
 
 export const CURRENCIES = [
+  { code: 'HKD', symbol: '$', locale: 'zh-HK' },
+  { code: 'BDT', symbol: '৳', locale: 'bn-BD' },
+  { code: 'CNY', symbol: '¥', locale: 'zh-CN' },
   { code: 'USD', symbol: '$', locale: 'en-US' },
   { code: 'EUR', symbol: '€', locale: 'de-DE' },
   { code: 'GBP', symbol: '£', locale: 'en-GB' },
-  { code: 'INR', symbol: '₹', locale: 'en-IN' },
-  { code: 'CAD', symbol: '$', locale: 'en-CA' },
-  { code: 'AUD', symbol: '$', locale: 'en-AU' },
-  { code: 'JPY', symbol: '¥', locale: 'ja-JP' },
-  { code: 'PKR', symbol: '₨', locale: 'en-PK' },
-  { code: 'AED', symbol: 'د.إ', locale: 'ar-AE' },
   { code: 'SGD', symbol: '$', locale: 'en-SG' },
-  { code: 'HKD', symbol: '$', locale: 'zh-HK' },
 ];
 
 let _currency = 'USD';
