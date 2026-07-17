@@ -95,7 +95,7 @@ export function renderDashboard(data) {
   </div>`;
 
   const health = `<div class="section" style="margin-top:24px">
-    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
       ${statTile({ label: 'Debt-to-income', value: pct(s.dti, 0), sub: dti.label, dot: statusColor[dti.level] })}
       ${statTile({ label: 'Total debt remaining', value: moneyCompact(s.totalDebtRemaining), sub: `${s.counts.activeInstallments} active installment${s.counts.activeInstallments === 1 ? '' : 's'}` })}
       ${statTile({ label: 'Active goals', value: num(s.counts.goals), sub: `${money(s.monthlyGoalContrib)}/mo set aside` })}
@@ -529,7 +529,7 @@ export function renderDebts(data) {
   const transactions = data.transactions || [];
   const s = debtsSummary(data);
 
-  const tiles = `<div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+  const tiles = `<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(160px,1fr))">
     ${statTile({ label: 'Owed to you', value: money(s.totalOwedToMe) })}
     ${statTile({ label: 'You owe', value: money(s.totalOwedByMe) })}
     ${statTile({ label: 'Net', value: money(s.net), subClass: s.net >= 0 ? 'pos' : 'neg', sub: s.net >= 0 ? 'In your favor' : 'You\'re net negative' })}
@@ -580,7 +580,7 @@ export function renderDebts(data) {
 }
 
 function summaryStrip(items) {
-  return `<div class="stat-grid" style="grid-template-columns:repeat(${items.length},1fr);margin-bottom:20px">
+  return `<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:20px">
     ${items.map(i => `<div class="stat"><div class="stat-label">${i.label}</div><div class="stat-value tabular">${i.value}</div></div>`).join('')}
   </div>`;
 }

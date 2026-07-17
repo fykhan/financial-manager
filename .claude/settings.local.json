@@ -40,7 +40,8 @@
       "Bash(grep -n \"assessDTI\\\\|^export function\\\\|^$\" public/js/calc.js)",
       "Bash(node --check public/js/charts.js)",
       "Bash(node --check public/js/views.js)",
-      "Bash(node --check public/js/calc.js)"
+      "Bash(node --check public/js/calc.js)",
+      "Bash(node -e ' *)"
     ]
   },
   "enabledPlugins": {
