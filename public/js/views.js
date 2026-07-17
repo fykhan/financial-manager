@@ -137,10 +137,10 @@ function upcomingRenewals(data) {
     <div class="section-head"><h2>⟳ Renewing soon</h2></div>
     <div class="table-wrap"><table class="data"><tbody>
       ${items.map(s => `<tr>
-        <td class="cell-strong">${escapeHtml(s.name)}</td>
-        <td class="num">${money(s.amount)}</td>
-        <td>${s.days <= 0 ? '<span class="badge crit">Due now</span>' : `<span class="badge ${s.days <= 3 ? 'warn' : ''}">in ${s.days} day${s.days === 1 ? '' : 's'}</span>`}</td>
-        <td class="cell-muted">${dateLabel(s.nextRenewal)}</td>
+        <td class="cell-strong" data-label="Service">${escapeHtml(s.name)}</td>
+        <td class="num" data-label="Amount">${money(s.amount)}</td>
+        <td data-label="Status">${s.days <= 0 ? '<span class="badge crit">Due now</span>' : `<span class="badge ${s.days <= 3 ? 'warn' : ''}">in ${s.days} day${s.days === 1 ? '' : 's'}</span>`}</td>
+        <td class="cell-muted" data-label="Renews">${dateLabel(s.nextRenewal)}</td>
       </tr>`).join('')}
     </tbody></table></div>
   </div>`;
@@ -163,11 +163,11 @@ export function renderIncome(data) {
       <tbody>
         ${list.map(i => `<tr>
           <td>${selectCheckbox('income', i.id)}</td>
-          <td class="cell-strong">${escapeHtml(i.source)} ${autoBadge(i.accountId, data)}${i.notes ? `<div class="cell-muted">${escapeHtml(i.notes)}</div>` : ''}</td>
-          <td><span class="badge cat">${escapeHtml(i.type || 'net')}</span></td>
-          <td>${FREQ_LABELS[i.frequency] || i.frequency}</td>
-          <td class="num">${money(i.amount)}</td>
-          <td class="num cell-strong">${money(toMonthly(i.amount, i.frequency))}</td>
+          <td class="cell-strong" data-label="Source">${escapeHtml(i.source)} ${autoBadge(i.accountId, data)}${i.notes ? `<div class="cell-muted">${escapeHtml(i.notes)}</div>` : ''}</td>
+          <td data-label="Type"><span class="badge cat">${escapeHtml(i.type || 'net')}</span></td>
+          <td data-label="Frequency">${FREQ_LABELS[i.frequency] || i.frequency}</td>
+          <td class="num" data-label="Amount">${money(i.amount)}</td>
+          <td class="num cell-strong" data-label="Monthly">${money(toMonthly(i.amount, i.frequency))}</td>
           <td>${rowActions('income', i.id)}</td>
         </tr>`).join('')}
       </tbody>
@@ -201,12 +201,12 @@ export function renderExpenses(data) {
           const m = toMonthly(e.amount, e.frequency);
           return `<tr>
             <td>${selectCheckbox('expenses', e.id)}</td>
-            <td class="cell-strong">${escapeHtml(e.name)} ${autoBadge(e.accountId, data)}${e.notes ? `<div class="cell-muted">${escapeHtml(e.notes)}</div>` : ''}</td>
-            <td><span class="badge cat">${escapeHtml(e.category || 'Other')}</span></td>
-            <td>${FREQ_LABELS[e.frequency] || e.frequency}</td>
-            <td class="num">${money(e.amount)}</td>
-            <td class="num cell-strong">${money(m)}</td>
-            <td class="num cell-muted">${totalMonthly > 0 ? pct(m / totalMonthly, 0) : '—'}</td>
+            <td class="cell-strong" data-label="Name">${escapeHtml(e.name)} ${autoBadge(e.accountId, data)}${e.notes ? `<div class="cell-muted">${escapeHtml(e.notes)}</div>` : ''}</td>
+            <td data-label="Category"><span class="badge cat">${escapeHtml(e.category || 'Other')}</span></td>
+            <td data-label="Frequency">${FREQ_LABELS[e.frequency] || e.frequency}</td>
+            <td class="num" data-label="Amount">${money(e.amount)}</td>
+            <td class="num cell-strong" data-label="Monthly">${money(m)}</td>
+            <td class="num cell-muted" data-label="% of total">${totalMonthly > 0 ? pct(m / totalMonthly, 0) : '—'}</td>
             <td>${rowActions('expenses', e.id)}</td>
           </tr>`;
         }).join('')}
@@ -263,15 +263,15 @@ export function renderInstallments(data) {
       <tbody>
         ${rows.map(({ it, st }) => `<tr>
           <td>${selectCheckbox('installments', it.id)}</td>
-          <td class="cell-strong">${escapeHtml(it.name)} ${autoBadge(it.accountId, data)}
+          <td class="cell-strong" data-label="Name">${escapeHtml(it.name)} ${autoBadge(it.accountId, data)}
             <div class="cell-muted">${money(it.principal)} @ ${num(it.apr || 0, (it.apr % 1 ? 2 : 0))}% · ${it.termMonths} mo</div></td>
-          <td class="num cell-strong">${money(st.monthlyPayment)}</td>
-          <td class="num">${money(st.remainingBalance)}</td>
-          <td>
+          <td class="num cell-strong" data-label="Monthly">${money(st.monthlyPayment)}</td>
+          <td class="num" data-label="Remaining">${money(st.remainingBalance)}</td>
+          <td data-label="Progress">
             ${progressBar(st.progress, { good: !st.active })}
             <div class="cell-muted" style="margin-top:5px">${st.monthsPaid} of ${it.termMonths} paid</div>
           </td>
-          <td>${st.active ? monthLabel(st.payoffDate) : '<span class="badge good">Paid off</span>'}</td>
+          <td data-label="Payoff">${st.active ? monthLabel(st.payoffDate) : '<span class="badge good">Paid off</span>'}</td>
           <td>${rowActions('installments', it.id)}</td>
         </tr>`).join('')}
       </tbody>
@@ -297,12 +297,12 @@ export function renderSubscriptions(data) {
       <tbody>
         ${sorted.map(s => `<tr>
           <td>${selectCheckbox('subscriptions', s.id)}</td>
-          <td class="cell-strong">${escapeHtml(s.name)} ${autoBadge(s.accountId, data)}</td>
-          <td><span class="badge cat">${escapeHtml(s.category || 'Other')}</span></td>
-          <td>${FREQ_LABELS[s.cycle] || s.cycle}</td>
-          <td class="num">${money(s.amount)}</td>
-          <td class="num cell-strong">${money(toMonthly(s.amount, s.cycle))}</td>
-          <td>${s.nextRenewal ? `${dateLabel(s.nextRenewal)} ${renewalBadge(s.days)}` : '<span class="cell-muted">—</span>'}</td>
+          <td class="cell-strong" data-label="Service">${escapeHtml(s.name)} ${autoBadge(s.accountId, data)}</td>
+          <td data-label="Category"><span class="badge cat">${escapeHtml(s.category || 'Other')}</span></td>
+          <td data-label="Cycle">${FREQ_LABELS[s.cycle] || s.cycle}</td>
+          <td class="num" data-label="Amount">${money(s.amount)}</td>
+          <td class="num cell-strong" data-label="Monthly">${money(toMonthly(s.amount, s.cycle))}</td>
+          <td data-label="Next renewal">${s.nextRenewal ? `${dateLabel(s.nextRenewal)} ${renewalBadge(s.days)}` : '<span class="cell-muted">—</span>'}</td>
           <td>${rowActions('subscriptions', s.id)}</td>
         </tr>`).join('')}
       </tbody>
@@ -470,13 +470,13 @@ export function renderAccounts(data) {
       <tbody>
         ${sorted.map(t => `<tr>
           <td>${selectCheckbox('transactions', t.id)}</td>
-          <td class="cell-muted">${dateLabel(t.date)}</td>
-          <td class="cell-strong">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
-          <td><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
-          <td>${t.type === 'transfer' ? `${escapeHtml(accountName(t.accountId))} → ${escapeHtml(accountName(t.toAccountId))}`
+          <td class="cell-muted" data-label="Date">${dateLabel(t.date)}</td>
+          <td class="cell-strong" data-label="Description">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
+          <td data-label="Category"><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
+          <td data-label="Account">${t.type === 'transfer' ? `${escapeHtml(accountName(t.accountId))} → ${escapeHtml(accountName(t.toAccountId))}`
             : t.type === 'debt' ? `Debt: ${escapeHtml(debtName(t.debtId))}`
             : escapeHtml(accountName(t.accountId))}</td>
-          <td class="num ${t.type === 'income' ? 'text-good' : t.type === 'expense' ? 'text-crit' : ''}">${t.type === 'expense' ? '−' : t.type === 'income' ? '+' : ''}${money(t.amount)}</td>
+          <td class="num ${t.type === 'income' ? 'text-good' : t.type === 'expense' ? 'text-crit' : ''}" data-label="Amount">${t.type === 'expense' ? '−' : t.type === 'income' ? '+' : ''}${money(t.amount)}</td>
           <td>${rowActions('transactions', t.id)}</td>
         </tr>`).join('')}
       </tbody>
@@ -613,11 +613,11 @@ export function renderDebts(data) {
       <tbody>
         ${debtTxns.map(t => `<tr>
           <td>${selectCheckbox('transactions', t.id)}</td>
-          <td class="cell-muted">${dateLabel(t.date)}</td>
-          <td class="cell-strong">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
-          <td>${escapeHtml(debtName(t.debtId))}</td>
-          <td><span class="badge ${t.debtDirection === 'decrease' ? 'good' : 'cat'}">${t.debtDirection === 'decrease' ? 'Repayment' : 'Added'}</span></td>
-          <td class="num">${money(t.amount)}</td>
+          <td class="cell-muted" data-label="Date">${dateLabel(t.date)}</td>
+          <td class="cell-strong" data-label="Description">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
+          <td data-label="Person">${escapeHtml(debtName(t.debtId))}</td>
+          <td data-label="Effect"><span class="badge ${t.debtDirection === 'decrease' ? 'good' : 'cat'}">${t.debtDirection === 'decrease' ? 'Repayment' : 'Added'}</span></td>
+          <td class="num" data-label="Amount">${money(t.amount)}</td>
           <td>${rowActions('transactions', t.id)}</td>
         </tr>`).join('')}
       </tbody>

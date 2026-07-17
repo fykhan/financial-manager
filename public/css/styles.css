@@ -466,6 +466,7 @@ table.data tr:hover td { background: rgba(255, 0, 255, 0.07); }
 .empty p { margin: 0 0 18px; font-size: 13px; letter-spacing: 0.03em; }
 
 /* ---------- Charts ---------- */
+.donut-layout { display: grid; grid-template-columns: var(--donut-size, 200px) 1fr; gap: 22px; align-items: center; }
 .chart svg { width: 100%; height: auto; display: block; overflow: visible; filter: drop-shadow(0 0 6px rgba(0, 255, 136, 0.25)); }
 .legend { display: flex; flex-direction: column; gap: 9px; margin-top: 4px; }
 .legend-item { display: flex; align-items: center; gap: 9px; font-size: 12.5px; }
@@ -581,12 +582,39 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2
   .stat-grid { grid-template-columns: repeat(2, 1fr); }
   .dash-grid { grid-template-columns: 1fr; }
   .field-row { grid-template-columns: 1fr; }
+  .donut-layout { grid-template-columns: 1fr; }
+  .chart { max-width: 220px; margin: 0 auto; }
   .view-container { padding: 20px 16px 60px; }
   .topbar { padding: 14px 16px; }
   /* iOS Safari zooms the viewport on focusing any form control under 16px. */
   .input, select.input, textarea.input, .input-sm { font-size: 16px; }
   .btn-icon { min-width: 44px; min-height: 44px; }
   .row-actions { gap: 8px; }
+
+  /* Tables become stacked "cards" instead of forcing horizontal scroll —
+     each row becomes a block, each cell a labelled line (label via the
+     data-label attribute set in views.js). */
+  .table-wrap { overflow-x: visible; }
+  table.data { min-width: 0; width: 100%; }
+  table.data thead { display: none; }
+  table.data, table.data tbody, table.data tr, table.data td { display: block; width: 100%; }
+  table.data tr {
+    margin-bottom: 12px; padding: 10px 12px;
+    border: 1px solid var(--border-2); border-top: 2px solid var(--accent-2);
+  }
+  table.data tr:last-child { margin-bottom: 0; }
+  table.data td {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 7px 0; border-bottom: 1px dashed var(--border-2); text-align: right;
+  }
+  table.data td:last-child { border-bottom: none; }
+  table.data td[data-label]::before {
+    content: attr(data-label);
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--accent-2); font-weight: 400; text-align: left; flex-shrink: 0;
+  }
+  table.data td:not([data-label]) { justify-content: flex-end; }
+  table.data .row-actions { justify-content: flex-end; width: 100%; }
 }
 @media (max-width: 520px) {
   .stat-grid { grid-template-columns: 1fr 1fr; }
