@@ -73,7 +73,7 @@ export function donut(items, { centerLabel = 'Total', size = 200, stroke = 26 } 
       <span class="legend-pct">${pct(d.amount / total, 0)}</span>
     </div>`).join('')}</div>`;
 
-  return `<div class="donut-layout" style="--donut-size:${size}px">
+  return `<div class="donut-layout">
     <div class="chart">${svg}</div>${legend}</div>`;
 }
 

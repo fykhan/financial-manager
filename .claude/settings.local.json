@@ -44,7 +44,8 @@
       "Bash(node -e ' *)",
       "Bash(node --check public/js/app.js)",
       "Bash(grep -n \"^/\\\\* ---------- Utility ---------- \\\\*/\" public/css/styles.css)",
-      "Bash(grep -n \"grid-template-columns:\\\\${size}\\\\|display:grid;grid-template-columns\" public/js/charts.js public/js/views.js)"
+      "Bash(grep -n \"grid-template-columns:\\\\${size}\\\\|display:grid;grid-template-columns\" public/js/charts.js public/js/views.js)",
+      "Bash(grep -n \"^html, body\\\\|^\\\\* { box-sizing\" public/css/styles.css)"
     ]
   },
   "enabledPlugins": {
