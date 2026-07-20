@@ -38,6 +38,22 @@ export function toYearly(amount, frequency) {
 
 const clampMonths = n => Math.max(0, Math.round(Number(n) || 0));
 
+/**
+ * Format a Date as a local-calendar ISO date (YYYY-MM-DD). We deliberately
+ * avoid toISOString().slice(0,10) here: toISOString() converts to UTC first,
+ * so for any timezone east of UTC a local-midnight date rolls back to the
+ * previous day (e.g. UTC+8 turned 2026-03-03 into 2026-03-02). Reading the
+ * local components back keeps the date the user actually meant.
+ */
+function toISODate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** Today's date as a local-calendar ISO string — the default "now" reference. */
+function todayISO() {
+  return toISODate(new Date());
+}
+
 /** Whole months elapsed between an ISO date and a reference date (default now). */
 export function monthsBetween(startISO, refISO) {
   if (!startISO) return 0;
@@ -51,10 +67,10 @@ export function monthsBetween(startISO, refISO) {
 
 /** Add whole months to an ISO date, returning a new ISO date string. */
 export function addMonths(startISO, months) {
-  const d = new Date((startISO || new Date().toISOString().slice(0, 10)) + 'T00:00:00');
+  const d = new Date((startISO || todayISO()) + 'T00:00:00');
   if (isNaN(d)) return null;
   d.setMonth(d.getMonth() + clampMonths(months));
-  return d.toISOString().slice(0, 10);
+  return toISODate(d);
 }
 
 /**
@@ -90,7 +106,7 @@ export function installmentStatus(it, refISO) {
   const totalPaid = monthlyPayment * monthsPaid;
   const totalCost = monthlyPayment * term;
   const totalInterest = Math.max(0, totalCost - principal);
-  const payoffDate = monthsRemaining > 0 ? addMonths(refISO || new Date().toISOString().slice(0, 10), monthsRemaining) : (refISO || new Date().toISOString().slice(0, 10));
+  const payoffDate = monthsRemaining > 0 ? addMonths(refISO || todayISO(), monthsRemaining) : (refISO || todayISO());
   const progress = term > 0 ? Math.min(1, monthsPaid / term) : 0;
 
   return {
@@ -141,13 +157,13 @@ export function savingStatus(saving, refISO) {
   const progress = hasTarget ? Math.min(1, saved / target) : null;
   const monthsToGoal = !hasTarget ? null : (remaining <= 0 ? 0 : (monthly > 0 ? Math.ceil(remaining / monthly) : Infinity));
   const projectedDate = Number.isFinite(monthsToGoal)
-    ? addMonths(refISO || new Date().toISOString().slice(0, 10), monthsToGoal)
+    ? addMonths(refISO || todayISO(), monthsToGoal)
     : null;
 
   // Are we on track for a user-set deadline?
   let onTrack = null, requiredMonthly = null;
   if (hasTarget && saving.deadline) {
-    const monthsLeft = Math.max(0, monthsBetween(refISO || new Date().toISOString().slice(0, 10), saving.deadline));
+    const monthsLeft = Math.max(0, monthsBetween(refISO || todayISO(), saving.deadline));
     requiredMonthly = monthsLeft > 0 ? remaining / monthsLeft : remaining;
     onTrack = remaining <= 0 ? true : monthly >= requiredMonthly - 0.5;
   }
@@ -312,7 +328,7 @@ export function assessDTI(dti) {
  */
 function isFuture(iso, refISO) {
   if (!iso) return false;
-  return iso > (refISO || new Date().toISOString().slice(0, 10));
+  return iso > (refISO || todayISO());
 }
 
 /** Is this transaction dated in the future relative to refISO (default today)? */

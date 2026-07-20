@@ -73,7 +73,10 @@ export function monthLabel(iso) {
 }
 
 export function todayISO() {
-  return new Date().toISOString().slice(0, 10);
+  // Local calendar date, not toISOString() — the latter converts to UTC first,
+  // so east-of-UTC users would get yesterday's date in the early hours.
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function escapeHtml(s) {
