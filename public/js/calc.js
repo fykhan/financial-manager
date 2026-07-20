@@ -179,7 +179,7 @@ export function summary(data, refISO) {
   const totalDebtRemaining = installments.reduce((s, it) => s + installmentStatus(it, refISO).remainingBalance, 0);
 
   const monthlySavingsContrib = savings.reduce((s, g) => {
-    const st = savingStatus({ ...g, saved: savingBalance(g, transactions) }, refISO);
+    const st = savingStatus({ ...g, saved: savingBalance(g, transactions, refISO) }, refISO);
     return s + (st.complete ? 0 : (Number(g.monthlyContribution) || 0));
   }, 0);
 
@@ -232,6 +232,10 @@ export function summary(data, refISO) {
  * - 'transactions' — every category uses only this calendar month's real
  *   expense transactions, ignoring fixed records entirely.
  *
+ * In every mode, a future-dated transaction (see isScheduled) hasn't
+ * actually happened yet, so it's excluded from "real" spending regardless of
+ * which calendar month it falls in.
+ *
  * 'fixed' and 'transactions' are display-only alternate views (e.g. a
  * dashboard toggle) — callers that feed budgetStatus or summary() should
  * stick to the 'auto' default.
@@ -248,7 +252,7 @@ export function spendingByCategory(data, refISO, mode = 'auto') {
   if (mode === 'auto') {
     transactionSourced = new Set((data.budgets || []).map(b => b.category));
     (data.transactions || []).forEach(t => {
-      if (t.type === 'expense' && inCalendarMonth(t.date, refISO)) transactionSourced.add(t.category || 'Other');
+      if (t.type === 'expense' && inCalendarMonth(t.date, refISO) && !isFuture(t.date, refISO)) transactionSourced.add(t.category || 'Other');
     });
   }
 
@@ -271,7 +275,7 @@ export function spendingByCategory(data, refISO, mode = 'auto') {
 
   if (mode !== 'fixed') {
     (data.transactions || []).forEach(t => {
-      if (t.type === 'expense' && inCalendarMonth(t.date, refISO)) add(t.category, Number(t.amount) || 0);
+      if (t.type === 'expense' && inCalendarMonth(t.date, refISO) && !isFuture(t.date, refISO)) add(t.category, Number(t.amount) || 0);
     });
   }
 
@@ -299,6 +303,32 @@ export function assessDTI(dti) {
 }
 
 /**
+ * A transaction dated after refISO (default today) hasn't happened yet — it's
+ * scheduled, not posted. Every balance/summary function below excludes these
+ * so a future-dated entry has no effect until its date actually arrives,
+ * which happens for free on the next render since these all default refISO
+ * to "now". scheduledTransactions() is the flip side: what got excluded, for
+ * display as "upcoming".
+ */
+function isFuture(iso, refISO) {
+  if (!iso) return false;
+  return iso > (refISO || new Date().toISOString().slice(0, 10));
+}
+
+/** Is this transaction dated in the future relative to refISO (default today)? */
+export function isScheduled(t, refISO) {
+  return isFuture(t.date, refISO);
+}
+
+/** Every future-dated transaction — not yet posted to any balance — soonest first. */
+export function scheduledTransactions(data, refISO) {
+  return (data.transactions || [])
+    .filter(t => isFuture(t.date, refISO))
+    .slice()
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+}
+
+/**
  * Cash-flow effect of one transaction on a given account, from the account's
  * own point of view (ignoring credit-vs-depository sign flip — see
  * accountBalance). Expense/income only count against their own accountId;
@@ -322,13 +352,17 @@ function literalDelta(t, accountId) {
 
 /**
  * Derived current balance for one account: its opening `balance` plus every
- * transaction that touches it. For a credit account `balance` means "amount
- * owed", so the literal cash delta is inverted — a charge (money "out")
- * increases what's owed, and a payment/transfer in reduces it.
+ * already-posted transaction that touches it. For a credit account `balance`
+ * means "amount owed", so the literal cash delta is inverted — a charge
+ * (money "out") increases what's owed, and a payment/transfer in reduces it.
+ * Future-dated transactions (see isScheduled) are excluded — they haven't
+ * happened yet, so they don't move the balance until their date arrives.
  */
-export function accountBalance(account, transactions) {
+export function accountBalance(account, transactions, refISO) {
   const isCredit = account.type === 'credit';
-  const delta = (transactions || []).reduce((s, t) => s + literalDelta(t, account.id), 0);
+  const delta = (transactions || [])
+    .filter(t => !isFuture(t.date, refISO))
+    .reduce((s, t) => s + literalDelta(t, account.id), 0);
   return (Number(account.balance) || 0) + (isCredit ? -delta : delta);
 }
 
@@ -336,12 +370,13 @@ export function accountBalance(account, transactions) {
  * Chronological running balance for one account: its opening balance, then
  * one point per calendar day that had at least one transaction touching it,
  * in date order. Same-day transactions collapse into a single point (the
- * balance at the end of that day).
+ * balance at the end of that day). Future-dated transactions are excluded —
+ * see accountBalance.
  */
-export function accountBalanceHistory(account, transactions) {
+export function accountBalanceHistory(account, transactions, refISO) {
   const isCredit = account.type === 'credit';
   const relevant = (transactions || [])
-    .filter(t => t.accountId === account.id || t.toAccountId === account.id)
+    .filter(t => (t.accountId === account.id || t.toAccountId === account.id) && !isFuture(t.date, refISO))
     .slice()
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
@@ -368,16 +403,19 @@ export function accountBalanceHistory(account, transactions) {
  * user's own accounts, paying down a credit card, or a savings contribution/
  * withdrawal all move money between buckets that are each already counted
  * here, so by construction none of them change the total — only income and
- * expense transactions actually move the line.
+ * expense transactions actually move the line. Future-dated transactions are
+ * excluded — see accountBalance.
  */
-export function netWorthHistory(data) {
+export function netWorthHistory(data, refISO) {
   const accounts = data.accounts || [];
   const savings = data.savings || [];
   const transactions = data.transactions || [];
   const opening = accounts.reduce((s, a) => s + (Number(a.balance) || 0) * (a.type === 'credit' ? -1 : 1), 0)
     + savings.reduce((s, sv) => s + (Number(sv.saved) || 0), 0);
 
-  const sorted = [...transactions].sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+  const sorted = transactions
+    .filter(t => !isFuture(t.date, refISO))
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const points = [];
   let running = opening;
   let i = 0;
@@ -400,46 +438,49 @@ export function netWorthHistory(data) {
 }
 
 /** Just the current (most recent) point of netWorthHistory, as a single number. */
-export function currentNetWorth(data) {
-  const { opening, points } = netWorthHistory(data);
+export function currentNetWorth(data, refISO) {
+  const { opening, points } = netWorthHistory(data, refISO);
   return points.length ? points[points.length - 1].balance : opening;
 }
 
 /**
  * Current outstanding amount for one debt: its opening `amount` plus every
- * 'debt' transaction logged against it. A transaction's debtDirection is
- * 'increase' (lend more / borrow more — grows what's outstanding) or
- * 'decrease' (a repayment — shrinks it), independent of which way the debt
- * itself runs (owed_to_me vs owed_by_me) — debts are tracked on their own,
- * not linked to any account.
+ * already-posted 'debt' transaction logged against it. A transaction's
+ * debtDirection is 'increase' (lend more / borrow more — grows what's
+ * outstanding) or 'decrease' (a repayment — shrinks it), independent of
+ * which way the debt itself runs (owed_to_me vs owed_by_me) — debts are
+ * tracked on their own, not linked to any account. Future-dated transactions
+ * are excluded — see accountBalance.
  */
-export function debtBalance(debt, transactions) {
+export function debtBalance(debt, transactions, refISO) {
   const delta = (transactions || [])
-    .filter(t => t.type === 'debt' && t.debtId === debt.id)
+    .filter(t => t.type === 'debt' && t.debtId === debt.id && !isFuture(t.date, refISO))
     .reduce((s, t) => s + (t.debtDirection === 'decrease' ? -(Number(t.amount) || 0) : (Number(t.amount) || 0)), 0);
   return (Number(debt.amount) || 0) + delta;
 }
 
 /**
  * Current saved amount for one saving: its opening `saved` plus every
- * 'savings' transaction logged against it. 'contribute' grows it, 'withdraw'
- * shrinks it — the mirror image of the debit/credit literalDelta applies to
- * the linked account, so the money is never double-counted, only moved.
+ * already-posted 'savings' transaction logged against it. 'contribute' grows
+ * it, 'withdraw' shrinks it — the mirror image of the debit/credit
+ * literalDelta applies to the linked account, so the money is never
+ * double-counted, only moved. Future-dated transactions are excluded — see
+ * accountBalance.
  */
-export function savingBalance(saving, transactions) {
+export function savingBalance(saving, transactions, refISO) {
   const delta = (transactions || [])
-    .filter(t => t.type === 'savings' && t.savingId === saving.id)
+    .filter(t => t.type === 'savings' && t.savingId === saving.id && !isFuture(t.date, refISO))
     .reduce((s, t) => s + (t.savingDirection === 'withdraw' ? -(Number(t.amount) || 0) : (Number(t.amount) || 0)), 0);
   return (Number(saving.saved) || 0) + delta;
 }
 
 /** Roll every debt into what's owed to you vs. what you owe others. */
-export function debtsSummary(data) {
+export function debtsSummary(data, refISO) {
   const debts = data.debts || [];
   const transactions = data.transactions || [];
   let totalOwedToMe = 0, totalOwedByMe = 0;
   debts.forEach(d => {
-    const bal = debtBalance(d, transactions);
+    const bal = debtBalance(d, transactions, refISO);
     if (d.direction === 'owed_by_me') totalOwedByMe += bal;
     else totalOwedToMe += bal;
   });
@@ -453,12 +494,12 @@ export function debtsSummary(data) {
  * accounts (see literalDelta's 'savings' handling). For total net worth,
  * which does count savings, see netWorthHistory.
  */
-export function accountsSummary(data) {
+export function accountsSummary(data, refISO) {
   const accounts = data.accounts || [];
   const transactions = data.transactions || [];
   let totalCash = 0, totalCreditOwed = 0, totalCreditLimit = 0;
   accounts.forEach(a => {
-    const bal = accountBalance(a, transactions);
+    const bal = accountBalance(a, transactions, refISO);
     if (a.type === 'credit') {
       totalCreditOwed += bal;
       totalCreditLimit += Number(a.creditLimit) || 0;

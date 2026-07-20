@@ -7,7 +7,7 @@ import {
   assessSavingsRate, assessDTI, daysUntil,
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
   assessBudget, budgetStatus, accountBalanceHistory, netWorthHistory, currentNetWorth,
-  debtBalance, debtsSummary, savingBalance, dueSoon,
+  debtBalance, debtsSummary, savingBalance, dueSoon, isScheduled, scheduledTransactions,
 } from '../public/js/calc.js';
 
 const approx = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -495,6 +495,67 @@ test('debtBalance grows on increase and shrinks on decrease, regardless of direc
   const owedByMe = { id: 'd2', direction: 'owed_by_me', amount: 50 };
   const txns2 = [{ type: 'debt', debtId: 'd2', debtDirection: 'decrease', amount: 20 }]; // paid back $20 -> owe 30
   approx(debtBalance(owedByMe, txns2), 30);
+});
+
+test('isScheduled flags a transaction dated after refISO, not one dated today or earlier', () => {
+  assert.equal(isScheduled({ date: '2026-07-16' }, '2026-07-15'), true);
+  assert.equal(isScheduled({ date: '2026-07-15' }, '2026-07-15'), false);
+  assert.equal(isScheduled({ date: '2026-07-14' }, '2026-07-15'), false);
+  assert.equal(isScheduled({ date: '' }, '2026-07-15'), false); // undated -> never scheduled
+});
+
+test('scheduledTransactions returns only future-dated transactions, soonest first', () => {
+  const data = {
+    transactions: [
+      { id: 't1', date: '2026-08-01' },
+      { id: 't2', date: '2026-07-10' }, // past -> excluded
+      { id: 't3', date: '2026-07-20' },
+    ],
+  };
+  const upcoming = scheduledTransactions(data, '2026-07-15');
+  assert.deepEqual(upcoming.map(t => t.id), ['t3', 't1']);
+});
+
+test('accountBalance excludes a future-dated transaction until its date arrives', () => {
+  const checking = { id: 'a1', type: 'checking', balance: 1000 };
+  const txns = [
+    { accountId: 'a1', type: 'expense', amount: 60, date: '2026-07-10' }, // posted
+    { accountId: 'a1', type: 'expense', amount: 500, date: '2026-08-01' }, // scheduled
+  ];
+  approx(accountBalance(checking, txns, '2026-07-15'), 1000 - 60);
+  // once "today" reaches the scheduled date, it posts automatically
+  approx(accountBalance(checking, txns, '2026-08-01'), 1000 - 60 - 500);
+});
+
+test('accountsSummary, netWorthHistory, debtBalance, and savingBalance all exclude future-dated transactions', () => {
+  const data = {
+    accounts: [{ id: 'a1', type: 'checking', balance: 1000 }],
+    debts: [{ id: 'd1', direction: 'owed_to_me', amount: 100 }],
+    savings: [{ id: 's1', saved: 300 }],
+    transactions: [
+      { accountId: 'a1', type: 'expense', amount: 100, date: '2027-01-01' },
+      { type: 'debt', debtId: 'd1', debtDirection: 'increase', amount: 50, date: '2027-01-01' },
+      { type: 'savings', savingId: 's1', savingDirection: 'contribute', amount: 20, date: '2027-01-01' },
+    ],
+  };
+  approx(accountsSummary(data, '2026-07-15').totalCash, 1000);
+  approx(debtBalance(data.debts[0], data.transactions, '2026-07-15'), 100);
+  approx(savingBalance(data.savings[0], data.transactions, '2026-07-15'), 300);
+  const { opening, points } = netWorthHistory(data, '2026-07-15');
+  approx(opening, 1000 + 300);
+  assert.equal(points.length, 0);
+});
+
+test('spendingByCategory ignores a future-dated expense even within the same calendar month', () => {
+  const data = {
+    expenses: [{ amount: 1200, frequency: 'monthly', category: 'Housing' }],
+    transactions: [
+      { type: 'expense', category: 'Food', amount: 40, date: '2026-07-05' }, // already happened
+      { type: 'expense', category: 'Food', amount: 999, date: '2026-07-25' }, // future, same month -> excluded
+    ],
+  };
+  const cats = spendingByCategory(data, '2026-07-15');
+  approx(cats.find(c => c.category === 'Food').amount, 40);
 });
 
 test('debtsSummary splits totals by direction', () => {

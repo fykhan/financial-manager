@@ -5,6 +5,7 @@ import {
   toMonthly, FREQ_LABELS, assessSavingsRate, assessDTI, daysUntil,
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
   budgetStatus, netWorthHistory, currentNetWorth, debtBalance, debtsSummary, dueSoon,
+  isScheduled, scheduledTransactions,
 } from './calc.js';
 import { donut, compareBars, progressBar, seriesColor, lineChart } from './charts.js';
 import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, titleCase } from './format.js';
@@ -29,6 +30,12 @@ function autoBadge(accountId, data) {
   if (!accountId) return '';
   const acc = (data.accounts || []).find(a => a.id === accountId);
   return `<span class="badge good" title="Auto-pay: ${escapeHtml(acc?.name || 'linked account')}">⚡ ${escapeHtml(acc?.name || 'Auto')}</span>`;
+}
+
+/** A future-dated transaction hasn't posted yet — flag it in any ledger row. */
+function scheduledBadge(t) {
+  if (!isScheduled(t)) return '';
+  return `<span class="badge warn" title="Dated in the future — not yet counted in any balance">Scheduled</span>`;
 }
 
 function rowActions(collection, id) {
@@ -181,17 +188,20 @@ function miniRow(label, value) {
   return `<div class="flex between" style="padding:5px 0;font-size:13.5px"><span class="text-muted">${label}</span><span style="font-variant-numeric:tabular-nums">${value}</span></div>`;
 }
 
-/** Second dashboard row: recent activity (left) + what's due soon (right). */
+/** Second dashboard row: recent activity, what's due soon, and what's scheduled. */
 function dashboardActivityRow(data) {
-  const panelsHtml = [recentTransactionsPanel(data), dueSoonPanel(data)].filter(Boolean).join('');
+  const panelsHtml = [recentTransactionsPanel(data), dueSoonPanel(data), scheduledPanel(data)].filter(Boolean).join('');
   if (!panelsHtml) return '';
   return `<div class="dash-grid" style="margin-top:8px">${panelsHtml}</div>`;
 }
 
 function recentTransactionsPanel(data) {
   const transactions = data.transactions || [];
-  if (!transactions.length) return '';
-  const recent = [...transactions].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 5);
+  const recent = [...transactions]
+    .filter(t => !isScheduled(t))
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    .slice(0, 5);
+  if (!recent.length) return '';
   return `<div class="panel">
     <div class="flex between center">
       <h3 style="margin:0">Recent transactions</h3>
@@ -200,6 +210,27 @@ function recentTransactionsPanel(data) {
     <div class="panel-sub">Latest activity across every account</div>
     <div class="table-wrap"><table class="data"><tbody>
       ${recent.map(t => `<tr>
+        <td class="cell-muted" data-label="Date">${dateLabel(t.date)}</td>
+        <td class="cell-strong" data-label="Description">${escapeHtml(t.description)}</td>
+        <td data-label="Category"><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
+        <td class="num ${t.type === 'income' || (t.type === 'savings' && t.savingDirection === 'withdraw') ? 'text-good' : t.type === 'expense' || (t.type === 'savings' && t.savingDirection === 'contribute') ? 'text-crit' : ''}" data-label="Amount">${t.type === 'expense' || (t.type === 'savings' && t.savingDirection === 'contribute') ? '−' : t.type === 'income' || (t.type === 'savings' && t.savingDirection === 'withdraw') ? '+' : ''}${money(t.amount)}</td>
+      </tr>`).join('')}
+    </tbody></table></div>
+  </div>`;
+}
+
+/** Manually-entered transactions dated in the future — not yet counted in any balance. */
+function scheduledPanel(data) {
+  const upcoming = scheduledTransactions(data).slice(0, 5);
+  if (!upcoming.length) return '';
+  return `<div class="panel">
+    <div class="flex between center">
+      <h3 style="margin:0">Scheduled</h3>
+      <a href="#accounts" class="text-muted" style="font-size:12.5px">View all →</a>
+    </div>
+    <div class="panel-sub">Future-dated transactions — excluded from balances until their date arrives</div>
+    <div class="table-wrap"><table class="data"><tbody>
+      ${upcoming.map(t => `<tr>
         <td class="cell-muted" data-label="Date">${dateLabel(t.date)}</td>
         <td class="cell-strong" data-label="Description">${escapeHtml(t.description)}</td>
         <td data-label="Category"><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
@@ -505,7 +536,7 @@ function txnSavingsListFragment(data) {
       <tbody>
         ${pageItems.map(t => `<tr>
           <td>${selectCheckbox('transactions', t.id)}</td>
-          <td class="cell-muted" data-label="Date">${dateLabel(t.date)}</td>
+          <td class="cell-muted" data-label="Date">${dateLabel(t.date)} ${scheduledBadge(t)}</td>
           <td class="cell-strong" data-label="Description">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
           <td data-label="Savings">${escapeHtml(savingName(t.savingId))}</td>
           <td data-label="Account">${escapeHtml(accountName(t.accountId))}</td>
@@ -690,7 +721,7 @@ function txnAccountsListFragment(data) {
       <tbody>
         ${pageItems.map(t => `<tr>
           <td>${selectCheckbox('transactions', t.id)}</td>
-          <td class="cell-muted" data-label="Date">${dateLabel(t.date)}</td>
+          <td class="cell-muted" data-label="Date">${dateLabel(t.date)} ${scheduledBadge(t)}</td>
           <td class="cell-strong" data-label="Description">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
           <td data-label="Category"><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
           <td data-label="Account">${t.type === 'transfer' ? `${escapeHtml(accountName(t.accountId))} → ${escapeHtml(accountName(t.toAccountId))}`
@@ -865,7 +896,7 @@ function txnDebtsListFragment(data) {
       <tbody>
         ${pageItems.map(t => `<tr>
           <td>${selectCheckbox('transactions', t.id)}</td>
-          <td class="cell-muted" data-label="Date">${dateLabel(t.date)}</td>
+          <td class="cell-muted" data-label="Date">${dateLabel(t.date)} ${scheduledBadge(t)}</td>
           <td class="cell-strong" data-label="Description">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
           <td data-label="Person">${escapeHtml(debtName(t.debtId))}</td>
           <td data-label="Effect"><span class="badge ${t.debtDirection === 'decrease' ? 'good' : 'cat'}">${t.debtDirection === 'decrease' ? 'Repayment' : 'Added'}</span></td>
