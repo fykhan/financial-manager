@@ -5,15 +5,15 @@ import {
   toMonthly, FREQ_LABELS, assessSavingsRate, assessDTI, daysUntil,
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
   budgetStatus, netWorthHistory, currentNetWorth, debtBalance, debtsSummary, dueSoon,
-  isScheduled, scheduledTransactions,
+  isScheduled, scheduledTransactions, statement,
 } from './calc.js';
 import { donut, compareBars, progressBar, seriesColor, lineChart } from './charts.js';
-import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, titleCase } from './format.js';
+import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, titleCase, getCurrency } from './format.js';
 
 const VIEW_TITLES = {
   dashboard: 'Dashboard', income: 'Income', expenses: 'Expenses',
   installments: 'Installments', subscriptions: 'Subscriptions', savings: 'Savings',
-  accounts: 'Accounts', debts: 'Debts',
+  accounts: 'Accounts', debts: 'Debts', statement: 'Statement',
 };
 export function viewTitle(v) { return VIEW_TITLES[v] || 'GradPlan'; }
 
@@ -935,5 +935,314 @@ export function renderDebts(data) {
 function summaryStrip(items) {
   return `<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));margin-bottom:20px">
     ${items.map(i => `<div class="stat"><div class="stat-label">${i.label}</div><div class="stat-value tabular">${i.value}</div></div>`).join('')}
+  </div>`;
+}
+
+// ---------------- Statement ----------------
+// A statement is a report over an arbitrary period, so it carries its own
+// little bit of UI state (which period is selected) the same module-level way
+// accountFilter/spendMode do — no framework, just a variable + a setter.
+const STATEMENT_PRESETS = [
+  ['this-month', 'This month'], ['last-month', 'Last month'],
+  ['this-quarter', 'This quarter'], ['this-year', 'This year'], ['all-time', 'All time'],
+];
+
+/** Compute the {from,to} ISO window for a named preset, off the local calendar. */
+function presetRange(preset) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const iso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const first = (yy, mm) => iso(new Date(yy, mm, 1));
+  const last = (yy, mm) => iso(new Date(yy, mm + 1, 0)); // day 0 of next month = last day of this one
+  switch (preset) {
+    case 'last-month': return { from: first(y, m - 1), to: last(y, m - 1) };
+    case 'this-quarter': { const q = Math.floor(m / 3) * 3; return { from: first(y, q), to: last(y, q + 2) }; }
+    case 'this-year': return { from: `${y}-01-01`, to: `${y}-12-31` };
+    case 'all-time': return { from: '', to: iso(now) };
+    case 'this-month':
+    default: return { from: first(y, m), to: last(y, m) };
+  }
+}
+
+let statementPeriod = null; // { preset, from, to }
+function currentPeriod() {
+  if (!statementPeriod) statementPeriod = { preset: 'this-month', ...presetRange('this-month') };
+  return statementPeriod;
+}
+export function setStatementPreset(preset) {
+  statementPeriod = { preset, ...presetRange(preset) };
+}
+/** A manual date-input edit — snaps the period to 'custom' and keeps the other bound. */
+export function setStatementRange(from, to) {
+  const p = currentPeriod();
+  statementPeriod = { preset: 'custom', from: from ?? p.from, to: to ?? p.to };
+}
+
+function periodLabel(period) {
+  if (period.preset && period.preset !== 'custom') {
+    return STATEMENT_PRESETS.find(([k]) => k === period.preset)?.[1] || 'Custom period';
+  }
+  return `${period.from ? dateLabel(period.from) : 'the beginning'} – ${period.to ? dateLabel(period.to) : 'today'}`;
+}
+
+function periodSelector(period) {
+  return `<div class="panel no-print" style="margin-bottom:20px">
+    <div class="flex between center" style="flex-wrap:wrap;gap:14px">
+      <div class="flex gap-8" role="group" aria-label="Statement period" style="flex-wrap:wrap">
+        ${STATEMENT_PRESETS.map(([key, label]) => `
+          <button type="button" class="btn btn-sm ${period.preset === key ? 'btn-primary' : 'btn-ghost'}" data-statement-preset="${key}" aria-pressed="${period.preset === key}">${label}</button>
+        `).join('')}
+      </div>
+      <div class="flex center gap-8" style="flex-wrap:wrap">
+        <label class="field-inline" style="font-size:12px;color:var(--muted)">From
+          <input type="date" class="input input-sm" data-statement-date="from" value="${period.from || ''}" aria-label="From date">
+        </label>
+        <label class="field-inline" style="font-size:12px;color:var(--muted)">To
+          <input type="date" class="input input-sm" data-statement-date="to" value="${period.to || ''}" aria-label="To date">
+        </label>
+      </div>
+    </div>
+  </div>`;
+}
+
+/** Human label for a transaction's counterparty column, mirroring the accounts ledger. */
+function statementTarget(t, data) {
+  const accountName = id => (data.accounts || []).find(a => a.id === id)?.name || '—';
+  const debtName = id => (data.debts || []).find(d => d.id === id)?.person || '—';
+  const savingName = id => (data.savings || []).find(sv => sv.id === id)?.name || '—';
+  if (t.type === 'transfer') return `${escapeHtml(accountName(t.accountId))} → ${escapeHtml(accountName(t.toAccountId))}`;
+  if (t.type === 'debt') return `Debt: ${escapeHtml(debtName(t.debtId))}`;
+  if (t.type === 'savings') return `${escapeHtml(accountName(t.accountId))} · Savings: ${escapeHtml(savingName(t.savingId))}`;
+  return escapeHtml(accountName(t.accountId));
+}
+
+/** Signed, colour-coded amount for a ledger row (income/withdraw = +, expense/contribute = −). */
+function statementAmount(t) {
+  const inflow = t.type === 'income' || (t.type === 'savings' && t.savingDirection === 'withdraw');
+  const outflow = t.type === 'expense' || (t.type === 'savings' && t.savingDirection === 'contribute');
+  const cls = inflow ? 'text-good' : outflow ? 'text-crit' : '';
+  const sign = inflow ? '+' : outflow ? '−' : '';
+  return `<td class="num ${cls}" data-label="Amount">${sign}${money(t.amount)}</td>`;
+}
+
+export function renderStatement(data) {
+  const transactions = data.transactions || [];
+  const period = currentPeriod();
+
+  const header = periodSelector(period);
+  if (!transactions.length && !(data.accounts || []).length) {
+    return `${header}<div class="card">${empty('▦', 'Nothing to report yet', 'Add accounts and log some transactions, then come back to generate a statement for any period.', 'accounts')}</div>`;
+  }
+
+  const st = statement(data, period.from, period.to);
+  const printedRange = `<div class="statement-range flex between center" style="margin-bottom:20px;flex-wrap:wrap;gap:12px">
+    <div>
+      <h2 style="margin:0 0 2px">Statement — ${escapeHtml(periodLabel(period))}</h2>
+      <div class="text-muted" style="font-size:13px">${st.from ? dateLabel(st.from) : 'Beginning'} to ${st.to ? dateLabel(st.to) : 'today'} · ${num(st.count)} transaction${st.count === 1 ? '' : 's'}</div>
+    </div>
+    <div class="flex gap-8 no-print">
+      <button class="btn btn-sm" data-statement-export="csv">⬇ Export CSV</button>
+      <button class="btn btn-sm btn-primary" data-statement-export="print">🖨 Print / PDF</button>
+    </div>
+  </div>`;
+
+  const tiles = `<div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr));margin-bottom:20px">
+    ${statTile({ label: 'Money in', value: money(st.totalIncome), subClass: 'pos' })}
+    ${statTile({ label: 'Money out', value: money(st.totalExpense), subClass: 'neg' })}
+    ${statTile({ label: 'Net', value: money(st.net), sub: st.net >= 0 ? 'Surplus' : 'Shortfall', subClass: st.net >= 0 ? 'pos' : 'neg' })}
+    ${statTile({ label: 'Transactions', value: num(st.count) })}
+  </div>`;
+
+  return `${header}${printedRange}${tiles}
+    ${statementCategoryPanel(st)}
+    ${statementAccountsPanel(st)}
+    ${statementSavingsDebtPanel(st)}
+    ${statementLedger(st, data)}`;
+}
+
+/**
+ * A proper statement as CSV for the currently-selected period: a multi-section
+ * document (summary, category breakdown, account movements, savings/debt,
+ * then the full itemized ledger) rather than store.exportCSV's flat dump of
+ * every collection. Amounts are raw numbers so a spreadsheet can total them;
+ * ledger amounts are signed (money in +, money out −). Used by the Statement
+ * view's own "Export CSV" button. Also drives the filename via periodFilename.
+ */
+export function statementCSV(data) {
+  const period = currentPeriod();
+  const st = statement(data, period.from, period.to);
+  const accountName = id => (data.accounts || []).find(a => a.id === id)?.name || '';
+  const debtName = id => (data.debts || []).find(d => d.id === id)?.person || '';
+  const savingName = id => (data.savings || []).find(sv => sv.id === id)?.name || '';
+  const r2 = n => Math.round((Number(n) || 0) * 100) / 100;
+
+  const target = t => t.type === 'transfer' ? `${accountName(t.accountId)} → ${accountName(t.toAccountId)}`
+    : t.type === 'debt' ? `Debt: ${debtName(t.debtId)}`
+    : t.type === 'savings' ? `${accountName(t.accountId)} · Savings: ${savingName(t.savingId)}`
+    : accountName(t.accountId);
+  const signed = t => {
+    const amt = Number(t.amount) || 0;
+    if (t.type === 'income' || (t.type === 'savings' && t.savingDirection === 'withdraw')) return amt;
+    if (t.type === 'expense' || (t.type === 'savings' && t.savingDirection === 'contribute')) return -amt;
+    return amt;
+  };
+
+  const rows = [];
+  const push = (...cells) => rows.push(cells);
+  const blank = () => rows.push([]);
+
+  push('Statement');
+  push('Period', periodLabel(period));
+  push('From', st.from || 'beginning', 'To', st.to || 'today');
+  push('Currency', getCurrency());
+  blank();
+
+  push('Summary');
+  push('Money in', r2(st.totalIncome));
+  push('Money out', r2(st.totalExpense));
+  push('Net', r2(st.net));
+  push('Transactions', st.count);
+  blank();
+
+  if (st.byCategory.length) {
+    push('Spending by category');
+    push('Category', 'Total', '% of spend');
+    st.byCategory.forEach(c => push(c.category, r2(c.amount), st.totalExpense > 0 ? `${Math.round(c.amount / st.totalExpense * 100)}%` : ''));
+    blank();
+  }
+
+  if (st.accountMovements.length) {
+    push('Account movements');
+    push('Account', 'Type', 'Opening', 'Closing', 'Change');
+    st.accountMovements.forEach(a => push(a.name, titleCase(a.type), r2(a.opening), r2(a.closing), r2(a.change)));
+    blank();
+  }
+
+  if (st.savings.contributed || st.savings.withdrawn) {
+    push('Savings movement');
+    push('Contributed', r2(st.savings.contributed));
+    push('Withdrawn', r2(st.savings.withdrawn));
+    push('Net into savings', r2(st.savings.net));
+    blank();
+  }
+
+  if (st.debts.increased || st.debts.decreased) {
+    push('Debt movement');
+    push('Added / borrowed', r2(st.debts.increased));
+    push('Repaid', r2(st.debts.decreased));
+    push('Net change', r2(st.debts.net));
+    blank();
+  }
+
+  push('Transactions');
+  push('Date', 'Description', 'Type', 'Category', 'Account', 'Amount', 'Scheduled', 'Notes');
+  st.transactions.forEach(t => push(
+    t.date || '', t.description || '', t.type || '', t.category || '',
+    target(t), r2(signed(t)), isScheduled(t) ? 'yes' : '', t.notes || '',
+  ));
+
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  return rows.map(r => r.map(q).join(',')).join('\n');
+}
+
+/** A filename-safe token for the current statement period, e.g. "2026-07-01_to_2026-07-31". */
+export function statementFilename() {
+  const p = currentPeriod();
+  return `${p.from || 'start'}_to_${p.to || 'today'}`;
+}
+
+/** Spending-by-category breakdown for the period: donut + itemized table. */
+function statementCategoryPanel(st) {
+  if (!st.byCategory.length) {
+    return `<div class="panel" style="margin-bottom:20px"><h3>Spending by category</h3>
+      <div class="text-muted" style="padding:8px 0">No expense transactions in this period.</div></div>`;
+  }
+  return `<div class="panel" style="margin-bottom:20px">
+    <h3>Spending by category</h3>
+    <div class="panel-sub">Where money went over the period</div>
+    ${donut(st.byCategory, { centerLabel: 'total out' })}
+    <div class="table-wrap" style="margin-top:16px"><table class="data">
+      <thead><tr><th>Category</th><th class="num">Total</th><th class="num">% of spend</th></tr></thead>
+      <tbody>
+        ${st.byCategory.map(c => `<tr>
+          <td data-label="Category"><span class="badge cat">${escapeHtml(c.category)}</span></td>
+          <td class="num cell-strong" data-label="Total">${money(c.amount)}</td>
+          <td class="num cell-muted" data-label="% of spend">${st.totalExpense > 0 ? pct(c.amount / st.totalExpense, 0) : '—'}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+/** How each account's balance moved across the period: opening → closing. */
+function statementAccountsPanel(st) {
+  if (!st.accountMovements.length) return '';
+  return `<div class="panel" style="margin-bottom:20px">
+    <h3>Account movements</h3>
+    <div class="panel-sub">Opening and closing balance for each account over the period</div>
+    <div class="table-wrap"><table class="data">
+      <thead><tr><th>Account</th><th>Type</th><th class="num">Opening</th><th class="num">Closing</th><th class="num">Change</th></tr></thead>
+      <tbody>
+        ${st.accountMovements.map(a => `<tr>
+          <td class="cell-strong" data-label="Account">${escapeHtml(a.name)}</td>
+          <td data-label="Type"><span class="badge cat">${titleCase(a.type)}</span></td>
+          <td class="num" data-label="Opening">${money(a.opening)}</td>
+          <td class="num" data-label="Closing">${money(a.closing)}</td>
+          <td class="num ${a.change > 0 ? 'text-good' : a.change < 0 ? 'text-crit' : 'cell-muted'}" data-label="Change">${a.change > 0 ? '+' : a.change < 0 ? '−' : ''}${money(Math.abs(a.change))}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+  </div>`;
+}
+
+/** Savings and debt movement over the period (only shown if anything moved). */
+function statementSavingsDebtPanel(st) {
+  const sv = st.savings, db = st.debts;
+  const hasSavings = sv.contributed || sv.withdrawn;
+  const hasDebt = db.increased || db.decreased;
+  if (!hasSavings && !hasDebt) return '';
+  const panels = [];
+  if (hasSavings) {
+    panels.push(`<div class="panel">
+      <h3>Savings movement</h3>
+      ${miniRow('Contributed', `<span class="text-good">+${money(sv.contributed)}</span>`)}
+      ${miniRow('Withdrawn', `<span class="text-crit">−${money(sv.withdrawn)}</span>`)}
+      <div style="margin-top:6px;padding-top:8px;border-top:1px dashed var(--border)">
+        ${miniRow('<strong>Net into savings</strong>', `<strong class="${sv.net >= 0 ? 'text-good' : 'text-crit'}">${money(sv.net)}</strong>`)}
+      </div>
+    </div>`);
+  }
+  if (hasDebt) {
+    panels.push(`<div class="panel">
+      <h3>Debt movement</h3>
+      ${miniRow('Added / borrowed', money(db.increased))}
+      ${miniRow('Repaid', money(db.decreased))}
+      <div style="margin-top:6px;padding-top:8px;border-top:1px dashed var(--border)">
+        ${miniRow('<strong>Net change</strong>', `<strong class="${db.net <= 0 ? 'text-good' : 'text-crit'}">${db.net >= 0 ? '+' : '−'}${money(Math.abs(db.net))}</strong>`)}
+      </div>
+    </div>`);
+  }
+  return `<div class="dash-grid" style="margin-bottom:20px">${panels.join('')}</div>`;
+}
+
+/** The full transaction ledger for the period, chronological (statement order). */
+function statementLedger(st, data) {
+  return `<div class="section">
+    <div class="section-head"><h2>Transactions</h2></div>
+    ${!st.transactions.length
+      ? `<div class="text-muted" style="padding:12px 0">No transactions in this period.</div>`
+      : `<div class="table-wrap"><table class="data">
+        <thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Category</th><th>Account</th><th class="num">Amount</th></tr></thead>
+        <tbody>
+          ${st.transactions.map(t => `<tr>
+            <td class="cell-muted" data-label="Date">${dateLabel(t.date)} ${scheduledBadge(t)}</td>
+            <td class="cell-strong" data-label="Description">${escapeHtml(t.description)}${t.notes ? `<div class="cell-muted">${escapeHtml(t.notes)}</div>` : ''}</td>
+            <td data-label="Type">${titleCase(t.type || '')}</td>
+            <td data-label="Category"><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
+            <td data-label="Account">${statementTarget(t, data)}</td>
+            ${statementAmount(t)}
+          </tr>`).join('')}
+        </tbody>
+      </table></div>`}
   </div>`;
 }

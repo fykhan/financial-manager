@@ -7,6 +7,7 @@ import { openForm } from './forms.js';
 import {
   viewTitle, renderDashboard, renderIncome, renderExpenses,
   renderInstallments, renderSubscriptions, renderSavings, renderAccounts, renderDebts,
+  renderStatement, setStatementPreset, setStatementRange, statementCSV, statementFilename,
   setAccountFilter, clearAccountFilter, renderDrillDown, drillDownTitle,
   toggleSelect, selectAll, clearSelection, clearAllSelections, getSelectedIds,
   setPage, resetAllPages, LIST_FRAGMENTS, setSpendMode,
@@ -21,6 +22,7 @@ const RENDERERS = {
   savings: renderSavings,
   accounts: renderAccounts,
   debts: renderDebts,
+  statement: renderStatement,
 };
 
 let current = 'dashboard';
@@ -171,6 +173,8 @@ function wire() {
     const drillBtn = e.target.closest('[data-drill]');
     const clearFilterBtn = e.target.closest('[data-clear-account-filter]');
     const spendModeBtn = e.target.closest('[data-spend-mode]');
+    const statementPresetBtn = e.target.closest('[data-statement-preset]');
+    const statementExportBtn = e.target.closest('[data-statement-export]');
     const selectAllBox = e.target.closest('[data-select-all]');
     const selectBox = e.target.closest('[data-select]');
     const bulkDeleteBtn = e.target.closest('[data-bulk-delete]');
@@ -196,6 +200,16 @@ function wire() {
     }
     if (clearFilterBtn) { clearAccountFilter(); return render(); }
     if (spendModeBtn) { setSpendMode(spendModeBtn.dataset.spendMode); return render(); }
+    if (statementPresetBtn) { setStatementPreset(statementPresetBtn.dataset.statementPreset); return render(); }
+    if (statementExportBtn) {
+      if (statementExportBtn.dataset.statementExport === 'csv') {
+        download(`gradplan-statement-${statementFilename()}.csv`, statementCSV(store.getData()), 'text/csv');
+        toast('Statement CSV downloaded', 'good');
+      } else {
+        window.print();
+      }
+      return;
+    }
     if (selectAllBox) {
       const collection = selectAllBox.dataset.selectAll;
       const prefix = `${collection}:`;
@@ -232,6 +246,16 @@ function wire() {
       return;
     }
     if (accountCard) { setAccountFilter(accountCard.dataset.accountCard); return render(); }
+  });
+
+  // Statement date pickers fire 'change', not 'click' — handle them separately.
+  document.getElementById('view-container').addEventListener('change', e => {
+    const dateInput = e.target.closest('[data-statement-date]');
+    if (!dateInput) return;
+    const from = document.querySelector('[data-statement-date="from"]')?.value || '';
+    const to = document.querySelector('[data-statement-date="to"]')?.value || '';
+    setStatementRange(from, to);
+    render();
   });
 
   // Re-render whenever the store changes.

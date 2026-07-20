@@ -654,6 +654,113 @@ export function assessBudget(pctUsed) {
   return { level: 'critical', label: 'Way over' };
 }
 
+// ---------------- Statement (arbitrary-period report) ----------------
+
+/** ISO date one calendar day before `iso` (for "opening balance = as of the day before the period"). */
+function dayBefore(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d)) return iso;
+  d.setDate(d.getDate() - 1);
+  return toISODate(d);
+}
+
+/**
+ * Every transaction whose date falls in the inclusive [fromISO, toISO] window.
+ * An empty/undefined bound means "unbounded on that side" (so an all-time
+ * statement just passes from='' ). Dates are ISO strings, so plain string
+ * comparison is a correct chronological compare.
+ */
+export function transactionsInRange(transactions, fromISO, toISO) {
+  return (transactions || []).filter(t => {
+    const d = t.date || '';
+    if (fromISO && d < fromISO) return false;
+    if (toISO && d > toISO) return false;
+    return true;
+  });
+}
+
+/**
+ * An account's balance as of the end of `asOfISO` — its opening `balance`
+ * plus every transaction dated on or before that day. Unlike accountBalance,
+ * the cutoff is a caller-supplied statement date, not "today": a statement of
+ * a past period should show that period's real closing balance, so this
+ * counts a transaction purely by its own date (the credit-account sign flip
+ * from accountBalance still applies). Pass an empty asOfISO for "since the
+ * beginning of time" (just the opening balance, no deltas).
+ */
+export function accountBalanceAsOf(account, transactions, asOfISO) {
+  const isCredit = account.type === 'credit';
+  const delta = (transactions || [])
+    .filter(t => asOfISO && (t.date || '') <= asOfISO)
+    .reduce((s, t) => s + literalDelta(t, account.id), 0);
+  return (Number(account.balance) || 0) + (isCredit ? -delta : delta);
+}
+
+/**
+ * A full account statement for an arbitrary [fromISO, toISO] period:
+ * every transaction in the window plus the aggregates a statement wants at
+ * the bottom — money in/out/net, spending grouped by category, how each
+ * account's balance moved (opening → closing), and savings/debt movement.
+ *
+ * Balances are as-of the statement dates (see accountBalanceAsOf), so an
+ * account's `opening` is its balance the day before the period began and
+ * `closing` is its balance on the last day of the period; `change` is the
+ * difference. An empty `fromISO` opens the period from the beginning of time.
+ */
+export function statement(data, fromISO, toISO) {
+  const accounts = data.accounts || [];
+  const allTxns = data.transactions || [];
+
+  const transactions = transactionsInRange(allTxns, fromISO, toISO)
+    .slice()
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+  let totalIncome = 0, totalExpense = 0;
+  let savingsContributed = 0, savingsWithdrawn = 0;
+  let debtIncreased = 0, debtDecreased = 0;
+  const catMap = new Map();
+
+  transactions.forEach(t => {
+    const amt = Number(t.amount) || 0;
+    if (t.type === 'income') {
+      totalIncome += amt;
+    } else if (t.type === 'expense') {
+      totalExpense += amt;
+      const cat = t.category || 'Other';
+      catMap.set(cat, (catMap.get(cat) || 0) + amt);
+    } else if (t.type === 'savings') {
+      if (t.savingDirection === 'withdraw') savingsWithdrawn += amt; else savingsContributed += amt;
+    } else if (t.type === 'debt') {
+      if (t.debtDirection === 'decrease') debtDecreased += amt; else debtIncreased += amt;
+    }
+  });
+
+  const byCategory = [...catMap.entries()]
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const openingCutoff = fromISO ? dayBefore(fromISO) : '';
+  const accountMovements = accounts.map(a => {
+    const opening = accountBalanceAsOf(a, allTxns, openingCutoff);
+    const closing = accountBalanceAsOf(a, allTxns, toISO);
+    return { id: a.id, name: a.name, type: a.type, opening, closing, change: closing - opening };
+  });
+
+  return {
+    from: fromISO || null,
+    to: toISO || null,
+    transactions,
+    count: transactions.length,
+    totalIncome,
+    totalExpense,
+    net: totalIncome - totalExpense,
+    byCategory,
+    accountMovements,
+    savings: { contributed: savingsContributed, withdrawn: savingsWithdrawn, net: savingsContributed - savingsWithdrawn },
+    debts: { increased: debtIncreased, decreased: debtDecreased, net: debtIncreased - debtDecreased },
+  };
+}
+
 /**
  * Actual-vs-limit for each budget. spendingByCategory already sources a
  * budgeted category's "actual" from this month's real transactions (see its

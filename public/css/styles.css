@@ -649,7 +649,7 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2
 }
 @media print {
   body::before, body::after { display: none !important; }
-  .sidebar, .topbar, .row-actions, .btn { display: none !important; }
+  .sidebar, .topbar, .row-actions, .btn, .no-print { display: none !important; }
   .app { grid-template-columns: 1fr; }
   .card, .panel, .stat, .table-wrap { box-shadow: none; break-inside: avoid; }
 }

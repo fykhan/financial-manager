@@ -8,6 +8,7 @@ import {
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
   assessBudget, budgetStatus, accountBalanceHistory, netWorthHistory, currentNetWorth,
   debtBalance, debtsSummary, savingBalance, dueSoon, isScheduled, scheduledTransactions,
+  transactionsInRange, accountBalanceAsOf, statement,
 } from '../public/js/calc.js';
 
 const approx = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -572,4 +573,81 @@ test('debtsSummary splits totals by direction', () => {
   approx(s.totalOwedToMe, 70);
   approx(s.totalOwedByMe, 50);
   approx(s.net, 70 - 50);
+});
+
+test('transactionsInRange filters inclusively on both bounds', () => {
+  const txns = [
+    { id: 'a', date: '2026-06-30' },
+    { id: 'b', date: '2026-07-01' },
+    { id: 'c', date: '2026-07-15' },
+    { id: 'd', date: '2026-07-31' },
+    { id: 'e', date: '2026-08-01' },
+  ];
+  assert.deepEqual(transactionsInRange(txns, '2026-07-01', '2026-07-31').map(t => t.id), ['b', 'c', 'd']);
+  // open lower bound -> everything up to and including `to`
+  assert.deepEqual(transactionsInRange(txns, '', '2026-07-01').map(t => t.id), ['a', 'b']);
+  // open upper bound -> everything from `from` onward
+  assert.deepEqual(transactionsInRange(txns, '2026-07-31', '').map(t => t.id), ['d', 'e']);
+});
+
+test('accountBalanceAsOf counts by transaction date, not "today"', () => {
+  const acc = { id: 'cash', type: 'checking', balance: 1000 };
+  const txns = [
+    { type: 'expense', accountId: 'cash', amount: 100, date: '2026-07-05' },
+    { type: 'income', accountId: 'cash', amount: 500, date: '2026-07-20' },
+  ];
+  approx(accountBalanceAsOf(acc, txns, '2026-07-04'), 1000); // before anything posts
+  approx(accountBalanceAsOf(acc, txns, '2026-07-05'), 900);  // after the expense
+  approx(accountBalanceAsOf(acc, txns, '2026-07-31'), 1400); // after both
+  approx(accountBalanceAsOf(acc, txns, ''), 1000);           // empty cutoff = opening only
+});
+
+test('accountBalanceAsOf inverts the sign for credit accounts', () => {
+  const card = { id: 'visa', type: 'credit', balance: 0 };
+  const txns = [
+    { type: 'expense', accountId: 'visa', amount: 200, date: '2026-07-10' }, // charge grows what's owed
+    { type: 'income', accountId: 'visa', amount: 50, date: '2026-07-25' },   // payment reduces it
+  ];
+  approx(accountBalanceAsOf(card, txns, '2026-07-10'), 200);
+  approx(accountBalanceAsOf(card, txns, '2026-07-31'), 150);
+});
+
+test('statement aggregates a period end to end', () => {
+  const data = {
+    accounts: [{ id: 'cash', type: 'checking', balance: 1000 }],
+    savings: [{ id: 'sv1', saved: 0 }],
+    debts: [{ id: 'd1', direction: 'owed_by_me', amount: 300 }],
+    transactions: [
+      { id: 't0', type: 'income', accountId: 'cash', amount: 400, date: '2026-06-25', description: 'prior' }, // before period
+      { id: 't1', type: 'income', accountId: 'cash', amount: 2000, category: 'Salary', date: '2026-07-01', description: 'pay' },
+      { id: 't2', type: 'expense', accountId: 'cash', amount: 150, category: 'Food', date: '2026-07-05', description: 'groceries' },
+      { id: 't3', type: 'expense', accountId: 'cash', amount: 50, category: 'Transport', date: '2026-07-06', description: 'bus' },
+      { id: 't4', type: 'expense', accountId: 'cash', amount: 30, category: 'Food', date: '2026-07-10', description: 'lunch' },
+      { id: 't5', type: 'savings', accountId: 'cash', savingId: 'sv1', savingDirection: 'contribute', amount: 200, date: '2026-07-11', description: 'save' },
+      { id: 't6', type: 'debt', debtId: 'd1', debtDirection: 'decrease', amount: 100, date: '2026-07-12', description: 'repay' },
+      { id: 't7', type: 'income', accountId: 'cash', amount: 999, date: '2026-08-02', description: 'after' }, // after period
+    ],
+  };
+  const st = statement(data, '2026-07-01', '2026-07-31');
+
+  assert.equal(st.count, 6); // t1..t6, excludes t0 and t7
+  approx(st.totalIncome, 2000);
+  approx(st.totalExpense, 230);
+  approx(st.net, 1770);
+
+  // category breakdown, sorted by amount desc
+  assert.deepEqual(st.byCategory.map(c => c.category), ['Food', 'Transport']);
+  approx(st.byCategory[0].amount, 180); // 150 + 30
+
+  // savings / debt movement
+  approx(st.savings.contributed, 200);
+  approx(st.savings.net, 200);
+  approx(st.debts.decreased, 100);
+  approx(st.debts.net, -100);
+
+  // account movement: opening = 1000 + 400 (t0) = 1400; closing adds income - expense - savings out
+  const cash = st.accountMovements.find(a => a.id === 'cash');
+  approx(cash.opening, 1400);
+  approx(cash.closing, 1400 + 2000 - 150 - 50 - 30 - 200); // 2970
+  approx(cash.change, 1570);
 });
