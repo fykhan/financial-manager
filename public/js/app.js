@@ -7,7 +7,7 @@ import { openForm } from './forms.js';
 import {
   viewTitle, renderDashboard, renderIncome, renderExpenses,
   renderInstallments, renderSubscriptions, renderSavings, renderAccounts, renderDebts,
-  renderStatement, setStatementPreset, setStatementRange, statementCSV, statementFilename,
+  renderStatement, setStatementPreset, setStatementRange, statementCSV, statementFilename, statementDocument,
   setAccountFilter, clearAccountFilter, renderDrillDown, drillDownTitle,
   toggleSelect, selectAll, clearSelection, clearAllSelections, getSelectedIds,
   setPage, resetAllPages, LIST_FRAGMENTS, setSpendMode,
@@ -138,6 +138,33 @@ function openDataMenu() {
   });
 }
 
+// ---------- statement PDF (standalone document) ----------
+// Render the self-contained statement HTML into an off-screen iframe and print
+// just that document, so the PDF is a clean bank statement rather than a
+// screenshot of the app page (which would carry the app's theme and chrome).
+function printStatementDocument(html) {
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+  document.body.appendChild(frame);
+
+  const cleanup = () => frame.remove();
+  frame.contentWindow.addEventListener('afterprint', cleanup);
+
+  const doc = frame.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  doc.close();
+
+  // Give the iframe a tick to lay out before invoking print; fall back to
+  // removing it after a while in case afterprint never fires (some browsers).
+  setTimeout(() => {
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+    setTimeout(cleanup, 60000);
+  }, 150);
+}
+
 // ---------- sidebar (mobile) ----------
 function closeSidebar() { document.getElementById('sidebar').classList.remove('open'); }
 
@@ -206,7 +233,7 @@ function wire() {
         download(`gradplan-statement-${statementFilename()}.csv`, statementCSV(store.getData()), 'text/csv');
         toast('Statement CSV downloaded', 'good');
       } else {
-        window.print();
+        printStatementDocument(statementDocument(store.getData()));
       }
       return;
     }

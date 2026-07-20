@@ -746,11 +746,34 @@ export function statement(data, fromISO, toISO) {
     return { id: a.id, name: a.name, type: a.type, opening, closing, change: closing - opening };
   });
 
+  // Spendable balance = total cash minus total credit owed (see accountsSummary).
+  // A statement needs a single running balance the way a bank statement carries
+  // one down the page; spendable is the honest portfolio-wide figure, and it
+  // reconciles exactly: openingBalance + Σ every row's effect === closingBalance.
+  const openingBalance = accountMovements.reduce((s, a) => s + (a.type === 'credit' ? -a.opening : a.opening), 0);
+  const closingBalance = accountMovements.reduce((s, a) => s + (a.type === 'credit' ? -a.closing : a.closing), 0);
+
+  // Each transaction's effect on the spendable balance is the sum of its
+  // per-account cash deltas: a transfer between two own accounts nets to zero,
+  // a debt-only entry touches no account (zero), income/withdraw add, expense/
+  // contribute subtract — so the running balance only moves when real money
+  // enters or leaves the account pool.
+  const accountIds = accounts.map(a => a.id);
+  let running = openingBalance;
+  const register = transactions.map(t => {
+    const effect = accountIds.reduce((s, id) => s + literalDelta(t, id), 0);
+    running += effect;
+    return { ...t, moneyIn: effect > 0 ? effect : 0, moneyOut: effect < 0 ? -effect : 0, balance: running };
+  });
+
   return {
     from: fromISO || null,
     to: toISO || null,
     transactions,
+    register,
     count: transactions.length,
+    openingBalance,
+    closingBalance,
     totalIncome,
     totalExpense,
     net: totalIncome - totalExpense,

@@ -650,4 +650,49 @@ test('statement aggregates a period end to end', () => {
   approx(cash.opening, 1400);
   approx(cash.closing, 1400 + 2000 - 150 - 50 - 30 - 200); // 2970
   approx(cash.change, 1570);
+
+  // running-balance register: opening + Σ effects === closing, and every row reconciles
+  approx(st.openingBalance, 1400);
+  approx(st.closingBalance, 2970);
+  assert.equal(st.register.length, 6);
+  approx(st.register[st.register.length - 1].balance, st.closingBalance);
+  // income row: money in, balance climbs
+  const pay = st.register.find(r => r.id === 't1');
+  approx(pay.moneyIn, 2000);
+  approx(pay.moneyOut, 0);
+  approx(pay.balance, 1400 + 2000);
+  // savings contribution leaves the account pool -> money out
+  const save = st.register.find(r => r.id === 't5');
+  approx(save.moneyOut, 200);
+  // debt-only entry touches no account -> zero effect, balance unchanged from prior row
+  const repay = st.register.find(r => r.id === 't6');
+  approx(repay.moneyIn, 0);
+  approx(repay.moneyOut, 0);
+  approx(repay.balance, save.balance);
+});
+
+test('statement register reconciles with a credit account and a transfer', () => {
+  const data = {
+    accounts: [
+      { id: 'cash', type: 'checking', balance: 500 },
+      { id: 'visa', type: 'credit', balance: 0 },
+    ],
+    transactions: [
+      { id: 'a', type: 'income', accountId: 'cash', amount: 1000, date: '2026-07-02' },
+      { id: 'b', type: 'transfer', accountId: 'cash', toAccountId: 'visa', amount: 300, date: '2026-07-03' }, // pay down card
+      { id: 'c', type: 'expense', accountId: 'visa', amount: 120, date: '2026-07-04' }, // charge on card
+    ],
+  };
+  const st = statement(data, '2026-07-01', '2026-07-31');
+  // opening spendable = 500 cash - 0 owed = 500
+  approx(st.openingBalance, 500);
+  // transfer to a credit account nets zero on spendable (cash down 300, owed down 300)
+  const transfer = st.register.find(r => r.id === 'b');
+  approx(transfer.moneyIn, 0);
+  approx(transfer.moneyOut, 0);
+  // a charge on the card reduces spendable (owed goes up)
+  const charge = st.register.find(r => r.id === 'c');
+  approx(charge.moneyOut, 120);
+  approx(st.closingBalance, 500 + 1000 - 120);
+  approx(st.register[st.register.length - 1].balance, st.closingBalance);
 });

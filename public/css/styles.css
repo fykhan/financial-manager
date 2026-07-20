@@ -647,6 +647,13 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2
   .modal-head { padding-left: 60px; }
   .modal-head::before { left: 14px; }
 }
+.statement-boundary td {
+  background: var(--surface-2, rgba(127, 127, 127, 0.06));
+  font-weight: 600;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
 @media print {
   body::before, body::after { display: none !important; }
   .sidebar, .topbar, .row-actions, .btn, .no-print { display: none !important; }
