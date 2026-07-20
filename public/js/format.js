@@ -56,12 +56,17 @@ export function num(n, digits = 0) {
   }).format(Number.isFinite(n) ? n : 0);
 }
 
+// Dates are always shown in English regardless of the selected currency —
+// otherwise picking e.g. HKD (zh-HK) or CNY (zh-CN) would render month names
+// in Chinese. Only the money helpers follow the currency's own locale.
+const DATE_LOCALE = 'en-US';
+
 /** "2026-07-15" -> "Jul 15, 2026" */
 export function dateLabel(iso) {
   if (!iso) return '—';
   const d = new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''));
   if (isNaN(d)) return '—';
-  return d.toLocaleDateString(localeFor(_currency), { year: 'numeric', month: 'short', day: 'numeric' });
+  return d.toLocaleDateString(DATE_LOCALE, { year: 'numeric', month: 'short', day: 'numeric' });
 }
 
 /** "2026-07-15" -> "Jul 2026" */
@@ -69,7 +74,7 @@ export function monthLabel(iso) {
   if (!iso) return '—';
   const d = new Date(iso + (iso.length === 10 ? 'T00:00:00' : ''));
   if (isNaN(d)) return '—';
-  return d.toLocaleDateString(localeFor(_currency), { year: 'numeric', month: 'short' });
+  return d.toLocaleDateString(DATE_LOCALE, { year: 'numeric', month: 'short' });
 }
 
 export function todayISO() {
