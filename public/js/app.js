@@ -219,10 +219,12 @@ function wire() {
     if (delBtn) {
       const { collection, id } = { collection: delBtn.dataset.del, id: delBtn.dataset.id };
       const rec = store.getById(collection, id);
-      const name = rec?.name || rec?.source || rec?.description || rec?.category || rec?.person || 'this item';
-      if (await confirmDialog('Delete?', `Remove “${name}”? This can't be undone.`)) {
-        try { await store.remove(collection, id); toast('Deleted', ''); } catch { /* store.js already toasted */ }
-      }
+      if (!rec) return;
+      const name = rec.name || rec.source || rec.description || rec.category || rec.person || 'item';
+      try {
+        await store.remove(collection, id);
+        toast(`Deleted “${name}”`, '', { actionLabel: 'Undo', duration: 6000, onAction: () => store.restore(collection, rec) });
+      } catch { /* store.js already toasted */ }
       return;
     }
     if (addBtn) {
@@ -263,13 +265,15 @@ function wire() {
       const collection = bulkDeleteBtn.dataset.bulkDelete;
       const ids = getSelectedIds(collection);
       if (!ids.length) return;
-      if (await confirmDialog('Delete selected?', `Remove ${ids.length} item${ids.length === 1 ? '' : 's'}? This can't be undone.`)) {
-        try {
-          await Promise.all(ids.map(id => store.remove(collection, id)));
-          clearSelection(collection);
-          toast('Deleted', '');
-        } catch { /* store.js already toasted individual failures */ }
-      }
+      const snapshot = ids.map(id => store.getById(collection, id)).filter(Boolean);
+      try {
+        await Promise.all(ids.map(id => store.remove(collection, id)));
+        clearSelection(collection);
+        toast(`Deleted ${snapshot.length} item${snapshot.length === 1 ? '' : 's'}`, '', {
+          actionLabel: 'Undo', duration: 6000,
+          onAction: () => snapshot.forEach(rec => store.restore(collection, rec)),
+        });
+      } catch { /* store.js already toasted individual failures */ }
       return;
     }
     if (pageNavBtn) {

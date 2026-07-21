@@ -335,16 +335,14 @@ export function openForm(collection, id = null, { prefill = null, onSaved = null
   form.querySelector('[data-act="cancel"]').addEventListener('click', closeModal);
   const delBtn = form.querySelector('[data-act="delete"]');
   if (delBtn) delBtn.addEventListener('click', async () => {
-    const { confirmDialog } = await import('./ui.js');
-    if (await confirmDialog('Delete?', `Remove “${escapeHtml(record.name || record.source || record.description || record.category || record.person || 'this item')}”? This can't be undone.`)) {
-      delBtn.disabled = true;
-      try {
-        await store.remove(collection, id);
-        toast('Deleted', '');
-        closeModal();
-      } catch {
-        delBtn.disabled = false; // store.js already toasted the failure
-      }
+    delBtn.disabled = true;
+    const name = record.name || record.source || record.description || record.category || record.person || 'item';
+    try {
+      await store.remove(collection, id);
+      toast(`Deleted “${name}”`, '', { actionLabel: 'Undo', duration: 6000, onAction: () => store.restore(collection, record) });
+      closeModal();
+    } catch {
+      delBtn.disabled = false; // store.js already toasted the failure
     }
   });
 
