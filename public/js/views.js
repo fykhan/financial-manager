@@ -11,7 +11,7 @@ import { donut, compareBars, progressBar, seriesColor, lineChart } from './chart
 import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, titleCase, getCurrency, todayISO } from './format.js';
 
 const VIEW_TITLES = {
-  dashboard: 'Dashboard', income: 'Income', expenses: 'Expenses',
+  dashboard: 'Dashboard', transactions: 'Transactions', income: 'Income', expenses: 'Expenses',
   installments: 'Installments', subscriptions: 'Subscriptions', savings: 'Savings',
   accounts: 'Accounts', debts: 'Debts', statement: 'Statement',
 };
@@ -768,13 +768,75 @@ export function renderAccounts(data) {
 
   const ledger = `<div class="section">
     <div class="section-head">
-      <div class="flex center gap-8"><h2>Transactions</h2>${filterChip}</div>
-      <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
+      <div class="flex center gap-8"><h2>Recent transactions</h2>${filterChip}</div>
+      <div class="flex center gap-8">
+        <a href="#transactions" class="btn btn-sm btn-ghost">View all →</a>
+        <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
+      </div>
     </div>
-    <div id="list-txn-accounts">${txnAccountsListFragment(data)}</div>
+    ${recentAccountsLedger(data)}
   </div>`;
 
   return `${tiles}${cards}${netWorthPanel}${ledger}`;
+}
+
+/** Compact, read-recent ledger for the Accounts page — most recent 10 rows,
+ * respecting the account-card filter, with no pagination or bulk controls.
+ * The full, filterable ledger lives on the Transactions view. */
+function recentAccountsLedger(data) {
+  const accounts = data.accounts || [];
+  const transactions = data.transactions || [];
+  const accountName = id => accounts.find(a => a.id === id)?.name || '—';
+  const debtName = id => (data.debts || []).find(d => d.id === id)?.person || '—';
+  const savingName = id => (data.savings || []).find(sv => sv.id === id)?.name || '—';
+  const filtered = accountFilter
+    ? transactions.filter(t => t.accountId === accountFilter || t.toAccountId === accountFilter)
+    : transactions;
+  const rows = [...filtered].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 10);
+  if (!rows.length) {
+    return `<div class="text-muted" style="padding:12px 0">${accountFilter ? 'No transactions for this account yet.' : 'No transactions logged yet.'}</div>`;
+  }
+  return `<div class="table-wrap"><table class="data">
+    <thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Account</th><th class="num">Amount</th><th></th></tr></thead>
+    <tbody>
+      ${rows.map(t => `<tr>
+        <td class="cell-muted" data-label="Date">${dateLabel(t.date)} ${scheduledBadge(t)}</td>
+        <td class="cell-strong" data-label="Description">${escapeHtml(t.description)}</td>
+        <td data-label="Category"><span class="badge cat">${escapeHtml(t.category || 'Other')}</span></td>
+        <td data-label="Account">${t.type === 'transfer' ? `${escapeHtml(accountName(t.accountId))} → ${escapeHtml(accountName(t.toAccountId))}`
+          : t.type === 'debt' ? `Debt: ${escapeHtml(debtName(t.debtId))}`
+          : t.type === 'savings' ? `${escapeHtml(accountName(t.accountId))} · Savings: ${escapeHtml(savingName(t.savingId))}`
+          : escapeHtml(accountName(t.accountId))}</td>
+        <td class="num ${t.type === 'income' || (t.type === 'savings' && t.savingDirection === 'withdraw') ? 'text-good' : t.type === 'expense' || (t.type === 'savings' && t.savingDirection === 'contribute') ? 'text-crit' : ''}" data-label="Amount">${t.type === 'expense' || (t.type === 'savings' && t.savingDirection === 'contribute') ? '−' : t.type === 'income' || (t.type === 'savings' && t.savingDirection === 'withdraw') ? '+' : ''}${money(t.amount)}</td>
+        <td>${rowActions('transactions', t.id)}</td>
+      </tr>`).join('')}
+    </tbody>
+  </table></div>`;
+}
+
+// ---------------- Transactions (top-level ledger) ----------------
+// Search + filter controls are added in Phase 6; placeholder keeps the view self-contained until then.
+function txnFilterControls() { return ''; }
+
+export function renderTransactions(data) {
+  const accounts = data.accounts || [];
+  const transactions = data.transactions || [];
+  if (!transactions.length && !accounts.length) {
+    return `<div class="card">${empty('▤', 'No transactions yet', 'Add an account, then log income and spending to build your ledger.', 'accounts')}</div>`;
+  }
+
+  const posted = transactions.filter(t => !isScheduled(t));
+  const moneyIn = posted.filter(t => t.type === 'income').reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const moneyOut = posted.filter(t => t.type === 'expense').reduce((s, t) => s + (Number(t.amount) || 0), 0);
+
+  return `
+    ${summaryStrip([
+      { label: 'Transactions', value: num(transactions.length) },
+      { label: 'Money in (posted)', value: money(moneyIn, { cents: false }) },
+      { label: 'Money out (posted)', value: money(moneyOut, { cents: false }) },
+    ])}
+    ${txnFilterControls(data)}
+    <div id="list-txn-accounts">${txnAccountsListFragment(data)}</div>`;
 }
 
 function renderNetWorthPanel(data) {

@@ -5,7 +5,7 @@ import { setCurrency, CURRENCIES, todayISO } from './format.js';
 import { initModalChrome, openModal, closeModal, toast, confirmDialog, download } from './ui.js';
 import { openForm } from './forms.js';
 import {
-  viewTitle, renderDashboard, renderIncome, renderExpenses,
+  viewTitle, renderDashboard, renderTransactions, renderIncome, renderExpenses,
   renderInstallments, renderSubscriptions, renderSavings, renderAccounts, renderDebts,
   renderStatement, setStatementPreset, setStatementRange, statementCSV, statementFilename, statementDocument,
   setAccountFilter, clearAccountFilter, renderDrillDown, drillDownTitle,
@@ -15,6 +15,7 @@ import {
 
 const RENDERERS = {
   dashboard: renderDashboard,
+  transactions: renderTransactions,
   income: renderIncome,
   expenses: renderExpenses,
   installments: renderInstallments,
