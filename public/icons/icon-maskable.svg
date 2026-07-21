@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#0a0a0f"/>
+  <!-- Brand mark kept inside the central ~80% safe zone for maskable cropping -->
+  <rect x="146" y="146" width="220" height="220" fill="#ff00ff"/>
+  <text x="256" y="256" font-family="Orbitron, 'Segoe UI', sans-serif" font-weight="900"
+        font-size="170" fill="#0a0a0f" text-anchor="middle" dominant-baseline="central">₲</text>
+</svg>

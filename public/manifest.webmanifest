@@ -1,0 +1,13 @@
+{
+  "name": "GradPlan — Financial Planner",
+  "short_name": "GradPlan",
+  "description": "A personal financial planner for new graduates: income, expenses, installments, subscriptions and savings.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0f",
+  "theme_color": "#0a0a0f",
+  "icons": [
+    { "src": "/icons/icon.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "any" },
+    { "src": "/icons/icon-maskable.svg", "type": "image/svg+xml", "sizes": "any", "purpose": "maskable" }
+  ]
+}

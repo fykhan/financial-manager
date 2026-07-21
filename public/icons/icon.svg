@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" fill="#0a0a0f"/>
+  <rect x="96" y="96" width="320" height="320" fill="#ff00ff"
+        clip-path="polygon(0 40px,40px 0,100% 0,100% calc(100% - 40px),calc(100% - 40px) 100%,0 100%)"/>
+  <text x="256" y="256" font-family="Orbitron, 'Segoe UI', sans-serif" font-weight="900"
+        font-size="240" fill="#0a0a0f" text-anchor="middle" dominant-baseline="central">₲</text>
+</svg>

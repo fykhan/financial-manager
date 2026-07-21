@@ -117,6 +117,13 @@ bundler. Data flows one way: **store → render**, triggered by a pub/sub subscr
 - **`scripts/hash_password.py`** — prompts for a password (never touches argv/env) and prints its
   argon2 hash for `AUTH_PASSWORD_HASH`.
 
+### PWA
+
+`public/manifest.webmanifest` (linked from `index.html` + `login.html`) makes the app installable —
+standalone display, dark theme color, SVG icons in `public/icons/` (a normal + a maskable variant, SVG
+so there are no binary assets in the repo). There is deliberately **no service worker**: the app is
+online-only (the server is the sole source of truth), so there's nothing to cache for offline use.
+
 ### Conventions worth knowing
 
 - Money amounts are stored in their native frequency (e.g. `frequency: 'monthly'|'weekly'|...`) and
