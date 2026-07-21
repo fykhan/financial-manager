@@ -127,10 +127,12 @@ const SCHEMAS = {
   transactions: {
     title: 'transaction',
     fields: [
+      // Amount first + autofocus: fastest path is type-the-number then a
+      // description. openModal() focuses the first control, so ordering is enough.
+      { name: 'amount', label: 'Amount', type: 'number', required: true, step: '0.01', half: true },
+      { name: 'description', label: 'Description', type: 'text', required: true, placeholder: 'e.g. Groceries, Salary, Pay off Visa' },
       { name: 'date', label: 'Date', type: 'date', required: true, def: todayISO(), half: true },
       { name: 'type', label: 'Type', type: 'select', options: TXN_TYPES, def: 'expense', half: true },
-      { name: 'description', label: 'Description', type: 'text', required: true, placeholder: 'e.g. Groceries, Salary, Pay off Visa' },
-      { name: 'amount', label: 'Amount', type: 'number', required: true, step: '0.01', half: true },
       { name: 'category', label: 'Category', type: 'select', options: TXN_CATEGORIES, def: 'Other', half: true },
       { name: 'accountId', label: 'Account', type: 'select', options: accountOptions, half: true, visibleIf: v => v.type !== 'debt' },
       { name: 'toAccountId', label: 'To account', type: 'select', options: accountOptions, half: true, hint: 'Transfers only', visibleIf: v => v.type === 'transfer' },
@@ -222,20 +224,74 @@ function buildFields(fields, record) {
   return html;
 }
 
-/** Open the add/edit modal for a collection. `id` present => edit. */
-export function openForm(collection, id = null) {
+const LAST_TXN_KEY = 'gradplan.lastTxn';
+
+/** Remembered account/type from the last logged transaction — sticky defaults
+ * for the next add (never applied when editing). */
+function stickyTxnDefaults() {
+  try { return JSON.parse(localStorage.getItem(LAST_TXN_KEY)) || {}; }
+  catch { return {}; }
+}
+function saveStickyTxn(values) {
+  try { localStorage.setItem(LAST_TXN_KEY, JSON.stringify({ accountId: values.accountId || '', type: values.type || 'expense' })); }
+  catch { /* private mode / quota — non-fatal */ }
+}
+
+/** The five categories used most in logged transactions this quarter, most-used
+ * first. Data-derived UI (not financial math), so it lives here, not in calc.js. */
+function topCategoriesThisQuarter(transactions) {
+  const now = new Date();
+  const qStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+  const startISO = `${qStart.getFullYear()}-${String(qStart.getMonth() + 1).padStart(2, '0')}-01`;
+  const counts = new Map();
+  (transactions || []).forEach(t => {
+    if (!t.category || (t.date && t.date < startISO)) return;
+    counts.set(t.category, (counts.get(t.category) || 0) + 1);
+  });
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([c]) => c);
+}
+
+/** Unique descriptions from the most recent transactions, for datalist + prefill. */
+function recentDescriptions(transactions, n = 50) {
+  const seen = new Set();
+  const out = [];
+  [...(transactions || [])]
+    .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    .forEach(t => {
+      const d = (t.description || '').trim();
+      if (d && !seen.has(d.toLowerCase())) { seen.add(d.toLowerCase()); out.push({ description: d, txn: t }); }
+    });
+  return out.slice(0, n);
+}
+
+/** Open the add/edit modal for a collection. `id` present => edit.
+ * Options: { prefill } seeds an add form; { onSaved } fires with the saved
+ * record after a successful create/update (used by "Mark paid" to advance a source date). */
+export function openForm(collection, id = null, { prefill = null, onSaved = null } = {}) {
   const schema = SCHEMAS[collection];
   const record = id ? store.getById(collection, id) : null;
   const isEdit = !!record;
 
+  // Sticky defaults (transactions, add only) fold into prefill; explicit
+  // prefill wins over remembered values.
+  let seed = record;
+  if (!isEdit) {
+    const sticky = collection === 'transactions' ? stickyTxnDefaults() : {};
+    const merged = { ...sticky, ...(prefill || {}) };
+    seed = Object.keys(merged).length ? merged : null;
+  }
+
+  const isTxn = collection === 'transactions';
   const body = `
     <form id="record-form" autocomplete="off">
-      ${buildFields(schema.fields, record)}
+      ${buildFields(schema.fields, seed)}
       ${schema.preview ? `<div id="calc-preview" class="calc-preview"></div>` : ''}
+      ${isTxn ? `<datalist id="txn-desc-list"></datalist>` : ''}
       <div class="modal-actions">
         ${isEdit ? `<button type="button" class="btn btn-danger" data-act="delete">Delete</button>` : ''}
         <span style="flex:1"></span>
         <button type="button" class="btn" data-act="cancel">Cancel</button>
+        ${isTxn && !isEdit ? `<button type="button" class="btn" data-act="save-add">Save &amp; add another</button>` : ''}
         <button type="submit" class="btn btn-primary">${isEdit ? 'Save changes' : 'Add'}</button>
       </div>
     </form>`;
@@ -273,6 +329,9 @@ export function openForm(collection, id = null) {
   };
   if (schema.fields.some(f => f.visibleIf)) { applyVisibility(); form.addEventListener('input', applyVisibility); }
 
+  // ---- fast-entry extras (transactions only) ----
+  if (isTxn) setupTxnFastEntry(form, getValues);
+
   form.querySelector('[data-act="cancel"]').addEventListener('click', closeModal);
   const delBtn = form.querySelector('[data-act="delete"]');
   if (delBtn) delBtn.addEventListener('click', async () => {
@@ -289,22 +348,108 @@ export function openForm(collection, id = null) {
     }
   });
 
+  // "Save & add another" reuses the normal submit path, flagged so success
+  // re-opens a fresh form instead of closing.
+  let saveAndAdd = false;
+  const saveAddBtn = form.querySelector('[data-act="save-add"]');
+  if (saveAddBtn) saveAddBtn.addEventListener('click', () => { saveAndAdd = true; form.requestSubmit(); });
+
   form.addEventListener('submit', async e => {
     e.preventDefault();
     const values = getValues();
     const err = validate(collection, values);
-    if (err) { toast(err, 'err'); return; }
+    if (err) { toast(err, 'err'); saveAndAdd = false; return; }
 
     const submitBtn = form.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
+    if (saveAddBtn) saveAddBtn.disabled = true;
     try {
-      if (isEdit) { await store.update(collection, id, values); toast('Saved', 'good'); }
-      else { await store.add(collection, values); toast(`${titleCase(schema.title)} added`, 'good'); }
-      closeModal();
+      let saved;
+      if (isEdit) { saved = await store.update(collection, id, values); toast('Saved', 'good'); }
+      else { saved = await store.add(collection, values); toast(`${titleCase(schema.title)} added`, 'good'); }
+      if (isTxn && !isEdit) saveStickyTxn(values);
+      if (onSaved) { try { await onSaved(saved); } catch { /* non-fatal follow-up */ } }
+      if (saveAndAdd && !isEdit) {
+        // Keep date + account + type; clear the rest for the next entry.
+        openForm(collection, null, { prefill: { date: values.date, accountId: values.accountId, type: values.type }, onSaved });
+      } else {
+        closeModal();
+      }
     } catch {
       submitBtn.disabled = false; // store.js already toasted the failure; keep typed input
+      if (saveAddBtn) saveAddBtn.disabled = false;
+      saveAndAdd = false;
     }
   });
+}
+
+/** Wire the transaction form's category chips, date shortcuts, and
+ * description autocomplete. All are progressive: they only enhance an
+ * already-working form. */
+function setupTxnFastEntry(form, getValues) {
+  const transactions = store.getData().transactions || [];
+
+  // --- Category chips: most-used categories this quarter, tap to select ---
+  const catWrap = form.querySelector('[data-field-wrap="category"]');
+  const catSelect = form.querySelector('select[name="category"]');
+  const topCats = topCategoriesThisQuarter(transactions);
+  if (catWrap && catSelect && topCats.length) {
+    const chips = document.createElement('div');
+    chips.className = 'chip-row';
+    chips.innerHTML = topCats.map(c => `<button type="button" class="chip" data-chip="${escapeHtml(c)}">${escapeHtml(c)}</button>`).join('');
+    catWrap.appendChild(chips);
+    chips.addEventListener('click', e => {
+      const chip = e.target.closest('[data-chip]');
+      if (!chip) return;
+      // Add the category as an option if the select doesn't already have it.
+      const val = chip.dataset.chip;
+      if (![...catSelect.options].some(o => o.value === val)) catSelect.add(new Option(val, val));
+      catSelect.value = val;
+      catSelect.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+
+  // --- Date shortcuts: Today / Yesterday ---
+  const dateWrap = form.querySelector('[data-field-wrap="date"]');
+  const dateInput = form.querySelector('input[name="date"]');
+  if (dateWrap && dateInput) {
+    const shortcuts = document.createElement('div');
+    shortcuts.className = 'date-shortcuts';
+    shortcuts.innerHTML = `
+      <button type="button" class="chip" data-date-set="0">Today</button>
+      <button type="button" class="chip" data-date-set="-1">Yesterday</button>`;
+    dateWrap.appendChild(shortcuts);
+    shortcuts.addEventListener('click', e => {
+      const btn = e.target.closest('[data-date-set]');
+      if (!btn) return;
+      const d = new Date();
+      d.setDate(d.getDate() + Number(btn.dataset.dateSet));
+      dateInput.value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      dateInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+
+  // --- Description autocomplete: datalist of recent descriptions; picking one
+  //     prefills amount/category/account from the most recent matching txn ---
+  const descInput = form.querySelector('input[name="description"]');
+  const datalist = form.querySelector('#txn-desc-list');
+  if (descInput && datalist) {
+    const history = recentDescriptions(transactions);
+    datalist.innerHTML = history.map(h => `<option value="${escapeHtml(h.description)}"></option>`).join('');
+    descInput.setAttribute('list', 'txn-desc-list');
+    const byDesc = new Map(history.map(h => [h.description.toLowerCase(), h.txn]));
+    descInput.addEventListener('input', () => {
+      const match = byDesc.get(descInput.value.trim().toLowerCase());
+      if (!match) return;
+      const amt = form.querySelector('input[name="amount"]');
+      const cat = form.querySelector('select[name="category"]');
+      const acc = form.querySelector('select[name="accountId"]');
+      if (amt && !amt.value) amt.value = match.amount ?? '';
+      if (cat && match.category && [...cat.options].some(o => o.value === match.category)) cat.value = match.category;
+      if (acc && match.accountId && [...acc.options].some(o => o.value === match.accountId)) acc.value = match.accountId;
+      form.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
 }
 
 function validate(collection, v) {

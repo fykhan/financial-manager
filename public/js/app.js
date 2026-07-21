@@ -225,7 +225,11 @@ function wire() {
       }
       return;
     }
-    if (addBtn) return openForm(addBtn.dataset.add);
+    if (addBtn) {
+      let prefill = null;
+      if (addBtn.dataset.addPrefill) { try { prefill = JSON.parse(addBtn.dataset.addPrefill); } catch { /* ignore */ } }
+      return openForm(addBtn.dataset.add, null, { prefill });
+    }
     if (drillBtn) {
       const key = drillBtn.dataset.drill;
       return openModal(drillDownTitle(key), renderDrillDown(key, store.getData()));

@@ -492,7 +492,10 @@ function savingsListFragment(data) {
         return `<div class="panel">
           <div class="flex between center" style="margin-bottom:2px">
             <span class="flex center gap-8">${selectCheckbox('savings', sv.id)}<h3 style="margin:0">${escapeHtml(sv.name)}</h3></span>
-            ${rowActions('savings', sv.id)}
+            <span class="flex center" style="gap:4px">
+              <button class="btn btn-ghost btn-icon btn-sm" data-add="transactions" data-add-prefill='{"type":"savings","savingId":"${sv.id}"}' title="Log a transaction for this saving" aria-label="Log transaction">＋</button>
+              ${rowActions('savings', sv.id)}
+            </span>
           </div>
           <div class="panel-sub">${st.hasTarget ? `${money(saved)} of ${money(sv.target)}` : `${money(saved)} saved`} ${track}</div>
           ${st.hasTarget ? `
@@ -559,7 +562,7 @@ export function renderSavings(data) {
 
   const ledger = `<div class="section">
     <div class="section-head"><h2>Savings transactions</h2>
-      <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
+      <button class="btn btn-sm btn-primary" data-add="transactions" data-add-prefill='{"type":"savings"}'>+ Add transaction</button>
     </div>
     <div id="list-txn-savings">${txnSavingsListFragment(data)}</div>
   </div>`;
@@ -868,7 +871,10 @@ function debtsListFragment(data) {
         return `<div class="panel">
           <div class="flex between center" style="margin-bottom:2px">
             <span class="flex center gap-8">${selectCheckbox('debts', d.id)}<h3 style="margin:0">${escapeHtml(d.person)}</h3></span>
-            ${rowActions('debts', d.id)}
+            <span class="flex center" style="gap:4px">
+              <button class="btn btn-ghost btn-icon btn-sm" data-add="transactions" data-add-prefill='{"type":"debt","debtId":"${d.id}"}' title="Log a transaction for this debt" aria-label="Log transaction">＋</button>
+              ${rowActions('debts', d.id)}
+            </span>
           </div>
           <div class="panel-sub">${owedByMe ? 'You owe them' : 'They owe you'}</div>
           <div class="stat-value tabular ${owedByMe ? 'text-crit' : 'text-good'}" style="margin-top:8px">${money(bal)}</div>
@@ -924,7 +930,7 @@ export function renderDebts(data) {
 
   const ledger = `<div class="section">
     <div class="section-head"><h2>Debt transactions</h2>
-      <button class="btn btn-sm btn-primary" data-add="transactions">+ Add transaction</button>
+      <button class="btn btn-sm btn-primary" data-add="transactions" data-add-prefill='{"type":"debt"}'>+ Add transaction</button>
     </div>
     <div id="list-txn-debts">${txnDebtsListFragment(data)}</div>
   </div>`;
