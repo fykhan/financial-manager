@@ -564,6 +564,25 @@ table.data tr:hover td { background: rgba(255, 0, 255, 0.07); }
 .toast.err { border-color: var(--critical); border-left-color: var(--critical); box-shadow: 0 0 18px rgba(255, 46, 99, 0.3); }
 @keyframes slidein { from { transform: translateX(20px); opacity: 0; } to { transform: none; opacity: 1; } }
 
+/* ---------- Mobile quick-add FAB ---------- */
+/* Hidden on desktop (the topbar "+ Log" covers it); shown only on small
+   screens. Superseded by the bottom nav's center "+" — see the bottom-nav
+   rules, which hide this when the bottom nav is present. */
+.fab { display: none; }
+@media (max-width: 900px) {
+  .fab {
+    display: grid; place-items: center;
+    position: fixed; right: 18px; bottom: calc(22px + env(safe-area-inset-bottom));
+    width: 56px; height: 56px; z-index: 55;
+    border: 0; cursor: pointer;
+    font-family: var(--font-head); font-size: 28px; font-weight: 700; line-height: 1;
+    color: var(--accent-ink); background: var(--accent);
+    box-shadow: var(--glow-accent), 0 8px 24px rgba(0, 0, 0, 0.5);
+    clip-path: polygon(0 10px, 10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%);
+  }
+  .fab:active { transform: translateY(1px); }
+}
+
 /* ---------- Utility ---------- */
 .mt-0 { margin-top: 0; } .mb-0 { margin-bottom: 0; }
 .text-good { color: var(--good-text); } .text-crit { color: var(--critical); } .text-muted { color: var(--muted); }

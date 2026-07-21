@@ -64,16 +64,20 @@
         <button class="btn btn-ghost btn-sm menu-toggle" id="menu-toggle" aria-label="Menu">☰</button>
         <h1 class="view-title" id="view-title">Dashboard</h1>
         <div class="topbar-actions">
-          <label class="field-inline" title="Display currency">
+          <label class="field-inline" title="Display currency (no conversion)">
             <select id="currency-select" class="input input-sm"></select>
           </label>
-          <button class="btn btn-primary btn-sm" id="btn-add-primary">+ Add</button>
+          <button class="btn btn-sm" id="btn-add-primary">+ Add</button>
+          <button class="btn btn-primary btn-sm" id="btn-log-txn">+ Log</button>
         </div>
       </header>
 
       <div class="view-container" id="view-container"><!-- views render here --></div>
     </main>
   </div>
+
+  <!-- Mobile quick-add FAB (superseded by the bottom nav's center + on small screens) -->
+  <button class="fab" id="fab-log" aria-label="Log transaction" title="Log transaction">+</button>
 
   <!-- Modal host -->
   <div class="modal-backdrop" id="modal-backdrop" hidden>

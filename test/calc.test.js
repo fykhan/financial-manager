@@ -2,13 +2,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  toMonthly, toYearly, monthsBetween, addMonths, amortizedPayment,
+  toMonthly, toYearly, monthsBetween, addMonths, addDays, amortizedPayment,
   installmentStatus, savingStatus, summary, spendingByCategory,
   assessSavingsRate, assessDTI, daysUntil,
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
   assessBudget, budgetStatus, accountBalanceHistory, netWorthHistory, currentNetWorth,
   debtBalance, debtsSummary, savingBalance, dueSoon, isScheduled, scheduledTransactions,
-  transactionsInRange, accountBalanceAsOf, statement,
+  transactionsInRange, accountBalanceAsOf, statement, nextOccurrence, monthlySpendComparison,
 } from '../public/js/calc.js';
 
 const approx = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -695,4 +695,45 @@ test('statement register reconciles with a credit account and a transfer', () =>
   approx(charge.moneyOut, 120);
   approx(st.closingBalance, 500 + 1000 - 120);
   approx(st.register[st.register.length - 1].balance, st.closingBalance);
+});
+
+test('nextOccurrence advances by exactly one period, frequency-aware', () => {
+  assert.equal(nextOccurrence('2026-07-15', 'weekly'), '2026-07-22');
+  assert.equal(nextOccurrence('2026-07-15', 'biweekly'), '2026-07-29');
+  assert.equal(nextOccurrence('2026-07-15', 'monthly'), '2026-08-15');
+  assert.equal(nextOccurrence('2026-07-15', 'quarterly'), '2026-10-15');
+  assert.equal(nextOccurrence('2026-07-15', 'semiannually'), '2027-01-15');
+  assert.equal(nextOccurrence('2026-07-15', 'annually'), '2027-07-15');
+  assert.equal(nextOccurrence('2026-07-15', undefined), '2026-08-15'); // unknown frequency -> monthly fallback
+  assert.equal(nextOccurrence('', 'monthly'), null);
+});
+
+test('addDays adds/subtracts calendar days', () => {
+  assert.equal(addDays('2026-07-15', 7), '2026-07-22');
+  assert.equal(addDays('2026-01-30', 3), '2026-02-02');
+  assert.equal(addDays('2026-07-15', -5), '2026-07-10');
+});
+
+test('monthlySpendComparison compares posted expense transactions month over month', () => {
+  const data = {
+    transactions: [
+      { id: 'a', type: 'expense', amount: 100, date: '2026-06-05' },
+      { id: 'b', type: 'expense', amount: 50, date: '2026-06-20' },
+      { id: 'c', type: 'expense', amount: 200, date: '2026-07-05' },
+      { id: 'd', type: 'income', amount: 5000, date: '2026-07-05' }, // ignored — not an expense
+      { id: 'e', type: 'expense', amount: 999, date: '2026-08-01' }, // future relative to refISO -> ignored
+    ],
+  };
+  const cmp = monthlySpendComparison(data, '2026-07-15');
+  approx(cmp.previous, 150);
+  approx(cmp.current, 200);
+  approx(cmp.deltaPct, (200 - 150) / 150);
+});
+
+test('monthlySpendComparison returns null deltaPct with nothing to compare against', () => {
+  const data = { transactions: [{ id: 'a', type: 'expense', amount: 200, date: '2026-07-05' }] };
+  const cmp = monthlySpendComparison(data, '2026-07-15');
+  approx(cmp.current, 200);
+  approx(cmp.previous, 0);
+  assert.equal(cmp.deltaPct, null);
 });

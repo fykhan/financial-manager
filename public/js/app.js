@@ -37,7 +37,7 @@ function render() {
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.setAttribute('aria-current', btn.dataset.view === current ? 'true' : 'false');
   });
-  // "+ Add" button only where a collection is active
+  // "+ Add" button only where a collection is active; "+ Log" is always shown.
   document.getElementById('btn-add-primary').style.display = current === 'dashboard' ? 'none' : '';
 }
 
@@ -184,6 +184,11 @@ function wire() {
   document.getElementById('btn-add-primary').addEventListener('click', () => {
     if (current !== 'dashboard') openForm(current);
   });
+
+  // Always-available quick-add for a transaction, from any view (topbar + mobile FAB).
+  const quickLog = () => openForm('transactions');
+  document.getElementById('btn-log-txn').addEventListener('click', quickLog);
+  document.getElementById('fab-log').addEventListener('click', quickLog);
 
   document.getElementById('btn-theme').addEventListener('click', toggleTheme);
   document.getElementById('btn-data').addEventListener('click', openDataMenu);

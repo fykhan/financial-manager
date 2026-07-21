@@ -73,6 +73,34 @@ export function addMonths(startISO, months) {
   return toISODate(d);
 }
 
+/** Add whole days to an ISO date, returning a new ISO date string. */
+export function addDays(startISO, days) {
+  const d = new Date((startISO || todayISO()) + 'T00:00:00');
+  if (isNaN(d)) return null;
+  d.setDate(d.getDate() + Math.round(Number(days) || 0));
+  return toISODate(d);
+}
+
+/**
+ * The next occurrence of a recurring date after it's been paid — a
+ * frequency/cycle-aware forward step used by "Mark paid" to roll a
+ * subscription's nextRenewal or an expense/installment's next due date
+ * forward by exactly one period. Unknown/missing frequencies fall back to
+ * monthly, since that's the common case for undated-frequency installments.
+ */
+export function nextOccurrence(dateISO, frequency) {
+  if (!dateISO) return null;
+  switch (frequency) {
+    case 'weekly': return addDays(dateISO, 7);
+    case 'biweekly': return addDays(dateISO, 14);
+    case 'quarterly': return addMonths(dateISO, 3);
+    case 'semiannually': return addMonths(dateISO, 6);
+    case 'annually': return addMonths(dateISO, 12);
+    case 'monthly':
+    default: return addMonths(dateISO, 1);
+  }
+}
+
 /**
  * Full picture of an installment / loan.
  * Inputs: principal (original amount), monthlyPayment, termMonths, startDate, apr (annual %, optional).
@@ -298,6 +326,25 @@ export function spendingByCategory(data, refISO, mode = 'auto') {
   return [...map.entries()]
     .map(([category, amount]) => ({ category, amount }))
     .sort((a, b) => b.amount - a.amount);
+}
+
+/**
+ * Posted-expense-transaction total for the reference calendar month vs. the
+ * one before it — real money movement only, not fixed/projected records —
+ * used for the dashboard's "vs last month" deltas. deltaPct is null when
+ * there's nothing to compare against (no spending last month, or division
+ * by zero), so callers can hide a misleading percentage rather than show one.
+ */
+export function monthlySpendComparison(data, refISO) {
+  const ref = refISO ? new Date(refISO + 'T00:00:00') : new Date();
+  const prevISO = toISODate(new Date(ref.getFullYear(), ref.getMonth() - 1, 1));
+  const sumFor = monthISO => (data.transactions || [])
+    .filter(t => t.type === 'expense' && inCalendarMonth(t.date, monthISO) && !isFuture(t.date, refISO))
+    .reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  const current = sumFor(refISO || todayISO());
+  const previous = sumFor(prevISO);
+  const deltaPct = previous > 0 ? (current - previous) / previous : null;
+  return { current, previous, deltaPct };
 }
 
 /**
@@ -619,7 +666,11 @@ export function dueSoon(data, days = 14, refISO) {
     if (!s.nextRenewal) return;
     const d = daysUntil(s.nextRenewal, refISO);
     if (d != null && d <= days) {
-      items.push({ kind: 'subscription', id: s.id, name: s.name, amount: Number(s.amount) || 0, date: s.nextRenewal, days: d });
+      items.push({
+        kind: 'subscription', id: s.id, name: s.name, amount: Number(s.amount) || 0,
+        date: s.nextRenewal, days: d, accountId: s.accountId || null,
+        dateField: 'nextRenewal', frequency: s.cycle,
+      });
     }
   });
 
@@ -627,7 +678,11 @@ export function dueSoon(data, days = 14, refISO) {
     if (!e.nextDate) return;
     const d = daysUntil(e.nextDate, refISO);
     if (d != null && d <= days) {
-      items.push({ kind: 'expense', id: e.id, name: e.name, amount: Number(e.amount) || 0, date: e.nextDate, days: d });
+      items.push({
+        kind: 'expense', id: e.id, name: e.name, amount: Number(e.amount) || 0,
+        date: e.nextDate, days: d, accountId: e.accountId || null,
+        dateField: 'nextDate', frequency: e.frequency, category: e.category,
+      });
     }
   });
 
@@ -636,7 +691,11 @@ export function dueSoon(data, days = 14, refISO) {
     const d = daysUntil(it.nextDueDate, refISO);
     if (d != null && d <= days) {
       const st = installmentStatus(it, refISO);
-      items.push({ kind: 'installment', id: it.id, name: it.name, amount: st.monthlyPayment, date: it.nextDueDate, days: d });
+      items.push({
+        kind: 'installment', id: it.id, name: it.name, amount: st.monthlyPayment,
+        date: it.nextDueDate, days: d, accountId: it.accountId || null,
+        dateField: 'nextDueDate', frequency: 'monthly',
+      });
     }
   });
 

@@ -113,6 +113,18 @@ export function remove(collection, id) {
   );
 }
 
+/** Re-add a record exactly as it was (same id, same createdAt) — for undoing
+ * a delete. Ids are client-generated and POST upserts via session.merge on
+ * the backend, so re-posting a just-deleted record is a clean restore. */
+export function restore(collection, record) {
+  if (!COLLECTIONS.includes(collection)) throw new Error('bad collection ' + collection);
+  return optimisticWrite(
+    () => { data = { ...data, [collection]: [...data[collection], record] }; },
+    () => post(`/api/${collection}`, record),
+    'Could not restore',
+  ).then(() => record);
+}
+
 export function getById(collection, id) {
   return data[collection].find(r => r.id === id) || null;
 }
