@@ -76,6 +76,15 @@ will show up as a chip and a filter afterwards.
 overall balance, and net worth over time. Click a card (or its **⧩ Filter** button) to show
 only that account's transactions.
 
+### Adjusting a balance
+
+If an account's real-world balance has drifted from what GradPlan shows, click **⇄ Adjust** on
+its card. Enter the true balance (for a credit card, the amount currently owed) and GradPlan
+logs the difference as a single transaction so your ledger stays reconciled — balances are
+always derived from your transactions, never overwritten. The correction is filed under the
+**Adjustment** category by default, but you can attribute it to any group instead (Transport,
+Bills, Education…) if you know what the gap was.
+
 **Transactions** is your full ledger. Use the controls at the top to find anything:
 
 - **Search** by description, category, or notes.
