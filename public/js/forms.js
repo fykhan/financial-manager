@@ -2,7 +2,7 @@
 
 import * as store from './store.js';
 import { openModal, closeModal, toast } from './ui.js';
-import { installmentStatus, savingStatus, toMonthly, FREQ_LABELS, amortizedPayment } from './calc.js';
+import { installmentStatus, savingStatus, toMonthly, FREQ_LABELS, amortizedPayment, accountBalance } from './calc.js';
 import { money, todayISO, escapeHtml, titleCase } from './format.js';
 
 const FREQ_OPTIONS = ['weekly', 'biweekly', 'monthly', 'quarterly', 'semiannually', 'annually'];
@@ -13,7 +13,12 @@ const SUB_CATEGORIES = ['Entertainment', 'Software', 'Health', 'News', 'Music', 
 
 const ACCOUNT_TYPES = ['checking', 'savings', 'cash', 'wallet', 'credit'];
 const TXN_TYPES = ['expense', 'income', 'transfer', 'debt', 'savings'];
-const TXN_CATEGORIES = ['Housing', 'Food', 'Transport', 'Health', 'Bills', 'Education', 'Entertainment', 'Shopping', 'Personal', 'Savings', 'Income', 'Transfer', 'Debt', 'Other'];
+const TXN_CATEGORIES = ['Housing', 'Food', 'Transport', 'Health', 'Bills', 'Education', 'Entertainment', 'Shopping', 'Personal', 'Savings', 'Income', 'Transfer', 'Debt', 'Adjustment', 'Other'];
+
+// Balance-adjustment categories: 'Adjustment' is the default, followed by every
+// existing transaction category so a correction can be attributed to a real
+// group (Transport, Bills, …) instead.
+const ADJUST_CATEGORIES = ['Adjustment', ...TXN_CATEGORIES.filter(c => c !== 'Adjustment')];
 
 const DEBT_DIRECTIONS = [
   { value: 'owed_to_me', label: 'They owe me' },
@@ -410,6 +415,161 @@ export function openForm(collection, id = null, { prefill = null, onSaved = null
       submitBtn.disabled = false; // store.js already toasted the failure; keep typed input
       if (saveAddBtn) saveAddBtn.disabled = false;
       saveAndAdd = false;
+    }
+  });
+}
+
+/** Work out how to reconcile an account to a new balance: the signed
+ * difference, and the transaction type/amount that would move the derived
+ * balance by exactly that much. Cash accounts move with income(+)/expense(−);
+ * for credit accounts `balance` means "owed", so the sense is inverted — a
+ * higher owed amount is a charge (expense), a lower one is a payment (income). */
+function adjustmentEffect(account, current, target) {
+  const diff = Math.round(((Number(target) || 0) - current) * 100) / 100;
+  if (diff === 0) return { diff: 0 };
+  const isCredit = account.type === 'credit';
+  const type = isCredit ? (diff > 0 ? 'expense' : 'income') : (diff > 0 ? 'income' : 'expense');
+  return { diff, type, amount: Math.abs(diff) };
+}
+
+/** Adjust an account to its real balance, logging the difference as a
+ * transaction (default category "Adjustment", changeable to any group). The
+ * balance is derived (opening + transactions), so we never write it directly —
+ * we post the delta and let calc.js recompute. */
+export function openAdjustBalance(accountId) {
+  const account = store.getById('accounts', accountId);
+  if (!account) return;
+  const isCredit = account.type === 'credit';
+  const current = accountBalance(account, store.getData().transactions);
+  const nowLabel = isCredit ? 'Amount owed now' : 'Current balance';
+  const newLabel = isCredit ? 'New amount owed' : 'New balance';
+
+  const catOptions = ADJUST_CATEGORIES
+    .map(c => `<option value="${escapeHtml(c)}" ${c === 'Adjustment' ? 'selected' : ''}>${escapeHtml(c)}</option>`)
+    .join('');
+
+  const body = `
+    <form id="adjust-form" autocomplete="off">
+      <p class="text-muted" style="margin-top:0;font-size:13.5px">
+        Set <strong>${escapeHtml(account.name)}</strong> to its real ${isCredit ? 'balance owed' : 'balance'}.
+        The difference is logged as a transaction so your ledger stays reconciled.
+      </p>
+      <div class="field-row">
+        <div class="field half">
+          <label>${nowLabel}</label>
+          <input class="input" type="text" value="${money(current)}" disabled>
+        </div>
+        <div class="field half" data-field-wrap="newBalance">
+          <label>${newLabel} *</label>
+          <input class="input" type="number" name="newBalance" step="0.01" inputmode="decimal" value="${current}" required autofocus>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field half">
+          <label>Category</label>
+          <select class="input" name="category">${catOptions}<option value="__custom__">Other…</option></select>
+          <input class="input" type="text" data-custom-for="category" placeholder="New category name" style="margin-top:7px" hidden>
+        </div>
+        <div class="field half">
+          <label>Date</label>
+          <input class="input" type="date" name="date" value="${todayISO()}">
+        </div>
+      </div>
+      <div class="field" data-field-wrap="description">
+        <label>Description</label>
+        <input class="input" type="text" name="description" value="Balance adjustment" placeholder="Balance adjustment">
+      </div>
+      <div class="field">
+        <label>Notes</label>
+        <textarea class="input" name="notes" placeholder="Optional"></textarea>
+      </div>
+      <div id="adjust-preview" class="calc-preview"></div>
+      <div class="modal-actions">
+        <span style="flex:1"></span>
+        <button type="button" class="btn" data-act="cancel">Cancel</button>
+        <button type="submit" class="btn btn-primary">Log adjustment</button>
+      </div>
+    </form>`;
+
+  openModal(`Adjust ${account.name}`, body);
+  const form = document.getElementById('adjust-form');
+
+  const getValues = () => {
+    const fd = new FormData(form);
+    let category = fd.get('category');
+    if (category === '__custom__') {
+      const el = form.querySelector('[data-custom-for="category"]');
+      category = el ? el.value.trim() : '';
+    }
+    return {
+      newBalance: fd.get('newBalance'),
+      category: category || 'Adjustment',
+      date: fd.get('date') || todayISO(),
+      description: (fd.get('description') || '').trim(),
+      notes: (fd.get('notes') || '').trim(),
+    };
+  };
+
+  const previewEl = document.getElementById('adjust-preview');
+  const refresh = () => {
+    const v = getValues();
+    if (v.newBalance === '' || v.newBalance == null || isNaN(Number(v.newBalance))) {
+      previewEl.innerHTML = `<div class="text-muted">Enter a new ${isCredit ? 'owed amount' : 'balance'} to see the adjustment.</div>`;
+      return;
+    }
+    const eff = adjustmentEffect(account, current, Number(v.newBalance));
+    if (!eff.diff) {
+      previewEl.innerHTML = `<div class="text-muted">No change — matches the current ${isCredit ? 'owed amount' : 'balance'}.</div>`;
+      return;
+    }
+    const up = eff.diff > 0;
+    previewEl.innerHTML = `
+      <div class="row"><span>Difference</span><strong class="${up ? 'text-good' : 'text-crit'}">${up ? '+' : '−'}${money(eff.amount)}</strong></div>
+      <div class="row"><span>Logs as</span><strong>${titleCase(eff.type)} · ${escapeHtml(v.category)}</strong></div>`;
+  };
+  refresh();
+  form.addEventListener('input', refresh);
+
+  // Custom-category select: "Other…" reveals a free-text input.
+  form.addEventListener('change', e => {
+    const sel = e.target.closest('select[name="category"]');
+    if (!sel) return;
+    const custom = form.querySelector('[data-custom-for="category"]');
+    if (!custom) return;
+    if (sel.value === '__custom__') { custom.hidden = false; custom.focus(); }
+    else { custom.hidden = true; custom.value = ''; }
+  });
+
+  form.querySelector('[data-act="cancel"]').addEventListener('click', closeModal);
+
+  form.addEventListener('submit', async e => {
+    e.preventDefault();
+    const v = getValues();
+    clearFieldErrors(form);
+    if (v.newBalance === '' || isNaN(Number(v.newBalance))) {
+      return showFieldError(form, 'newBalance', `${newLabel} must be a number`);
+    }
+    const eff = adjustmentEffect(account, current, Number(v.newBalance));
+    if (!eff.diff) {
+      showFieldError(form, 'newBalance', `Same as the current ${isCredit ? 'owed amount' : 'balance'} — nothing to log`);
+      return;
+    }
+    const submitBtn = form.querySelector('button[type="submit"]');
+    submitBtn.disabled = true;
+    try {
+      await store.add('transactions', {
+        type: eff.type,
+        amount: eff.amount,
+        category: v.category,
+        description: v.description || 'Balance adjustment',
+        date: v.date,
+        accountId: account.id,
+        notes: v.notes,
+      });
+      toast(`${escapeHtml(account.name)} adjusted`, 'good');
+      closeModal();
+    } catch {
+      submitBtn.disabled = false; // store.js already toasted the failure
     }
   });
 }

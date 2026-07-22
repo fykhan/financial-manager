@@ -3,7 +3,7 @@
 import * as store from './store.js';
 import { setCurrency, CURRENCIES, todayISO } from './format.js';
 import { initModalChrome, openModal, closeModal, toast, confirmDialog, download } from './ui.js';
-import { openForm, hasForm } from './forms.js';
+import { openForm, hasForm, openAdjustBalance } from './forms.js';
 import { dueSoon, nextOccurrence } from './calc.js';
 import {
   viewTitle, renderDashboard, renderTransactions, renderIncome, renderExpenses,
@@ -279,6 +279,7 @@ function wire() {
     const bulkDeleteBtn = e.target.closest('[data-bulk-delete]');
     const pageNavBtn = e.target.closest('[data-page-nav]');
     const accountFilterBtn = e.target.closest('[data-account-filter]');
+    const adjustBalanceBtn = e.target.closest('[data-adjust-balance]');
     const accountCard = e.target.closest('[data-account-card]');
 
     // Order matters: edit/delete/select controls are nested inside the
@@ -384,7 +385,8 @@ function wire() {
       if (container && renderFragment) container.innerHTML = renderFragment(store.getData());
       return;
     }
-    // The explicit filter button is checked before the whole-card click (it's nested inside).
+    // The explicit filter/adjust buttons are checked before the whole-card click (they're nested inside).
+    if (adjustBalanceBtn) return openAdjustBalance(adjustBalanceBtn.dataset.adjustBalance);
     if (accountFilterBtn) { setAccountFilter(accountFilterBtn.dataset.accountFilter); return render(); }
     if (accountCard) { setAccountFilter(accountCard.dataset.accountCard); return render(); }
   });

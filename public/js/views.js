@@ -1063,6 +1063,7 @@ function accountCard(a, transactions, selected = false) {
     <div class="flex between center" style="margin-bottom:2px">
       <h3 style="margin:0">${escapeHtml(a.name)}</h3>
       <div class="flex center gap-8">
+        <button type="button" class="btn btn-sm btn-ghost" data-adjust-balance="${a.id}" title="Set this account's real balance and log the difference">⇄ Adjust</button>
         <button type="button" class="btn btn-sm ${selected ? 'btn-primary' : 'btn-ghost'}" data-account-filter="${a.id}" aria-pressed="${selected}" title="Show only this account's transactions">⧩ ${selected ? 'Filtering' : 'Filter'}</button>
         ${rowActions('accounts', a.id)}
       </div>
