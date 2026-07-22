@@ -54,14 +54,22 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
   prefilled expense form and, `onSaved`, rolls the source record's next-due date forward via
   `nextOccurrence`. Dashboard nav items (sidebar + bottom) show a `dueSoon(data, 3)` count badge
   updated in `render()`.
-- **TODO before committing Phase 4:** also add Transactions to the **bottom nav** — but that's Phase 3.2,
-  do it there. Just commit 4.1 + 4.2 as-is next.
+- **Phase 7.1** effects toggle — `data-effects` on `<html>` (default `subtle`, `localStorage
+  gradplan.effects`), sidebar-footer "▓ Effects" button, `applyEffects`/`toggleEffects` in `app.js`.
+  `:root[data-effects="subtle"]` dims scanline/grid and drops the RGB-split + glitch-jitter on
+  `.glitch-text`/`.brand-text strong`/`.view-title` for a single clean glow.
+- **Phase 7.2** color semantics — input value text → `--text-1`, placeholder → `--muted`, field labels
+  → `--text-2`, table headers → `--text-2`; base `.badge` now neutral (border `--border-2`), magenta
+  moved to opt-in `.badge.accent`.
+- **Phase 7.3** typography — dropped uppercase/wide letter-spacing from `.btn`, `.field label`,
+  `.input-sm` (kept on headings, nav, stat/table-header labels).
+- **Phase 7.4** a11y — inline field errors (`validate` returns `{ field, message }`;
+  `showFieldError`/`clearFieldErrors` set `aria-invalid`/`aria-describedby` + `.field-error`, toast only
+  for cross-field); dark `--muted` bumped to `#7d8590`; `aria-label` on edit/delete icon buttons. Focus
+  trap already in `ui.js`.
 
 ## Remaining (not started)
 
-- **Phase 7.1–7.4** theme + a11y pass. Focus trap + `restore` groundwork ALREADY in `ui.js`/`store.js`.
-  Remaining: effects toggle (`data-effects`), color-semantics cleanup, typography (drop uppercase from
-  table cells/buttons/labels), inline field errors, `--muted` contrast bump, icon-button `aria-label`s.
 - **Phase 8.1–8.5** polish — selection re-render patching, statement month stepping `‹ ›`, currency
   "(no conversion)" label (partly done in topbar title attr), custom categories ("Other…"), keyboard
   shortcuts (`n`, `/`, `g`+`d/t/a/s`).
@@ -71,7 +79,7 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
 `calc.js`: `addDays`, `nextOccurrence`, `monthlySpendComparison`, `dueSoon` extra fields + tests.
 `store.js`: `restore`. `ui.js`: focus trap + toast action. These back Phases 5 and 7.4.
 
-## Sequencing to follow next (per plan table)
+## Sequencing to follow next (per plan table) — only 8.1–8.5 left
 
-7.1–7.4 → 8.1–8.5.
+8.1–8.5 (polish batch).
 Test gate: `node --test` green; add tests for any new `calc.js` fn (5.x helpers already tested).

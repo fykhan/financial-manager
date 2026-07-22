@@ -40,8 +40,8 @@ function scheduledBadge(t) {
 
 function rowActions(collection, id) {
   return `<div class="row-actions">
-    <button class="btn btn-ghost btn-icon btn-sm" data-edit="${collection}" data-id="${id}" title="Edit">✎</button>
-    <button class="btn btn-ghost btn-icon btn-sm btn-danger" data-del="${collection}" data-id="${id}" title="Delete">🗑</button>
+    <button class="btn btn-ghost btn-icon btn-sm" data-edit="${collection}" data-id="${id}" title="Edit" aria-label="Edit">✎</button>
+    <button class="btn btn-ghost btn-icon btn-sm btn-danger" data-del="${collection}" data-id="${id}" title="Delete" aria-label="Delete">🗑</button>
   </div>`;
 }
 

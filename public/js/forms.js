@@ -355,8 +355,15 @@ export function openForm(collection, id = null, { prefill = null, onSaved = null
   form.addEventListener('submit', async e => {
     e.preventDefault();
     const values = getValues();
+    clearFieldErrors(form);
     const err = validate(collection, values);
-    if (err) { toast(err, 'err'); saveAndAdd = false; return; }
+    if (err) {
+      // Highlight the offending field inline; fall back to a toast for
+      // cross-field errors that don't map to a single input.
+      if (!err.field || !showFieldError(form, err.field, err.message)) toast(err.message, 'err');
+      saveAndAdd = false;
+      return;
+    }
 
     const submitBtn = form.querySelector('button[type="submit"]');
     submitBtn.disabled = true;
@@ -450,16 +457,48 @@ function setupTxnFastEntry(form, getValues) {
   }
 }
 
+/** Returns { field, message } for the first problem (field is the input name,
+ * or null for cross-field errors that have no single culprit), else null. */
 function validate(collection, v) {
   const schema = SCHEMAS[collection];
   for (const f of schema.fields) {
-    if (f.required && (v[f.name] === '' || v[f.name] == null)) return `${f.label} is required`;
+    if (f.required && (v[f.name] === '' || v[f.name] == null)) return { field: f.name, message: `${f.label} is required` };
   }
   const amountFields = ['amount', 'principal', 'target', 'termMonths'];
   for (const key of amountFields) {
-    if (key in v && v[key] !== '' && Number(v[key]) < 0) return `${key} can't be negative`;
+    if (key in v && v[key] !== '' && Number(v[key]) < 0) {
+      const label = schema.fields.find(f => f.name === key)?.label || key;
+      return { field: key, message: `${label} can't be negative` };
+    }
   }
-  return schema.validate ? schema.validate(v) : null;
+  const msg = schema.validate ? schema.validate(v) : null;
+  return msg ? { field: null, message: msg } : null;
+}
+
+/** Clear any inline validation state left from a previous submit attempt. */
+function clearFieldErrors(form) {
+  form.querySelectorAll('.field-error').forEach(el => el.remove());
+  form.querySelectorAll('[aria-invalid]').forEach(el => {
+    el.removeAttribute('aria-invalid');
+    el.removeAttribute('aria-describedby');
+  });
+}
+
+/** Mark a field invalid, show the message beneath it, and focus it. */
+function showFieldError(form, name, message) {
+  const wrap = form.querySelector(`[data-field-wrap="${name}"]`);
+  const control = form.querySelector(`[name="${name}"]`);
+  if (!wrap || !control) return false;
+  const errId = `err-${name}`;
+  control.setAttribute('aria-invalid', 'true');
+  control.setAttribute('aria-describedby', errId);
+  const div = document.createElement('div');
+  div.className = 'field-error';
+  div.id = errId;
+  div.textContent = message;
+  wrap.appendChild(div);
+  control.focus();
+  return true;
 }
 
 // ---- live preview renderers ----

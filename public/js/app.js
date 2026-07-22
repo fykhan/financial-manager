@@ -83,6 +83,15 @@ function toggleTheme() {
   render();
 }
 
+// ---------- effects (per-device visual intensity) ----------
+function applyEffects(mode) {
+  document.documentElement.dataset.effects = mode;
+  localStorage.setItem('gradplan.effects', mode);
+}
+function toggleEffects() {
+  applyEffects(document.documentElement.dataset.effects === 'subtle' ? 'on' : 'subtle');
+}
+
 // ---------- currency ----------
 function initCurrency() {
   const sel = document.getElementById('currency-select');
@@ -221,6 +230,7 @@ function wire() {
   });
 
   document.getElementById('btn-theme').addEventListener('click', toggleTheme);
+  document.getElementById('btn-effects').addEventListener('click', toggleEffects);
   document.getElementById('btn-data').addEventListener('click', openDataMenu);
   document.getElementById('btn-logout').addEventListener('click', logout);
   document.getElementById('menu-toggle').addEventListener('click', () => {
@@ -388,6 +398,7 @@ function wire() {
 // ---------- boot ----------
 async function boot() {
   applyTheme(localStorage.getItem('gradplan.theme') || 'dark');
+  applyEffects(localStorage.getItem('gradplan.effects') || 'subtle');
   initModalChrome();
   wire();
   try {
