@@ -8,7 +8,7 @@ import { dueSoon, nextOccurrence } from './calc.js';
 import {
   viewTitle, renderDashboard, renderTransactions, renderIncome, renderExpenses,
   renderInstallments, renderSubscriptions, renderSavings, renderAccounts, renderDebts,
-  renderStatement, setStatementPreset, setStatementRange, statementCSV, statementFilename, statementDocument,
+  renderStatement, setStatementPreset, setStatementRange, stepStatementMonth, statementCSV, statementFilename, statementDocument,
   setAccountFilter, clearAccountFilter, setTxnFilter, clearTxnFilter, renderDrillDown, drillDownTitle,
   toggleSelect, selectAll, clearSelection, clearAllSelections, getSelectedIds,
   setPage, resetPage, resetAllPages, LIST_FRAGMENTS, setSpendMode,
@@ -44,6 +44,23 @@ function render() {
 
   // Due-soon count badge on the Dashboard nav items (sidebar + bottom nav).
   updateDueBadges(dueSoon(data, 3).length);
+}
+
+// A collection can surface in more than one list fragment on a page (a
+// transactions selection shows in the accounts/savings/debts ledgers).
+const FRAGMENT_KEYS_FOR = { transactions: ['txn-accounts', 'txn-savings', 'txn-debts'] };
+
+/** Re-render only the list fragment(s) for a collection that are on the page.
+ * Returns false if none were found (caller should fall back to full render). */
+function patchLists(collection) {
+  const keys = FRAGMENT_KEYS_FOR[collection] || [collection];
+  let patched = false;
+  keys.forEach(key => {
+    const container = document.getElementById(`list-${key}`);
+    const frag = LIST_FRAGMENTS[key];
+    if (container && frag) { container.innerHTML = frag(store.getData()); patched = true; }
+  });
+  return patched;
 }
 
 /** Show/update a small count badge on every Dashboard nav item. */
@@ -109,7 +126,7 @@ function initCurrency() {
 // ---------- data menu (import / export / reset) ----------
 function openDataMenu() {
   openModal('Your data', `
-    <p class="text-muted" style="margin-top:0;font-size:13.5px">Your data lives in your account on the server. Back it up or move it to another device below.</p>
+    <p class="text-muted" style="margin-top:0;font-size:13.5px">Your data lives in your account on the server. Back it up or move it to another device below. Amounts are stored and exported in their original currency — the display currency only changes the symbol, it doesn't convert values.</p>
     <div style="display:flex;flex-direction:column;gap:10px">
       <button class="btn btn-block" data-data="export-json">⬇ Export backup (JSON)</button>
       <button class="btn btn-block" data-data="export-csv">⬇ Export spreadsheet (CSV)</button>
@@ -120,6 +137,9 @@ function openDataMenu() {
       <button class="btn btn-block btn-danger" data-data="reset">🗑 Erase everything</button>
     </div>
     <input type="file" id="import-file" accept="application/json,.json" hidden>
+    <p class="text-muted" style="font-size:12px;margin:14px 0 0;letter-spacing:0.02em">
+      Keyboard: <strong>n</strong> new transaction · <strong>/</strong> search · <strong>g</strong> then <strong>d</strong>/<strong>t</strong>/<strong>a</strong>/<strong>s</strong> to jump to a view.
+    </p>
   `);
 
   const body = document.getElementById('modal-body');
@@ -306,6 +326,8 @@ function wire() {
       });
     }
     if (statementPresetBtn) { setStatementPreset(statementPresetBtn.dataset.statementPreset); return render(); }
+    const statementStepBtn = e.target.closest('[data-statement-step]');
+    if (statementStepBtn) { stepStatementMonth(parseInt(statementStepBtn.dataset.statementStep, 10)); return render(); }
     if (statementExportBtn) {
       if (statementExportBtn.dataset.statementExport === 'csv') {
         download(`gradplan-statement-${statementFilename()}.csv`, statementCSV(store.getData()), 'text/csv');
@@ -321,12 +343,15 @@ function wire() {
       const ids = [...document.querySelectorAll('[data-select^="' + prefix + '"]')]
         .map(el => el.dataset.select.slice(prefix.length));
       selectAll(collection, ids, selectAllBox.checked);
-      return render();
+      // Patch just the affected list(s) — a full render() would jump the scroll.
+      if (!patchLists(collection)) render();
+      return;
     }
     if (selectBox) {
       const [collection, id] = selectBox.dataset.select.split(':');
       toggleSelect(collection, id);
-      return render();
+      if (!patchLists(collection)) render();
+      return;
     }
     if (bulkDeleteBtn) {
       const collection = bulkDeleteBtn.dataset.bulkDelete;
@@ -392,6 +417,35 @@ function wire() {
   window.addEventListener('hashchange', () => {
     const v = location.hash.replace('#', '');
     if (RENDERERS[v] && v !== current) { clearAccountFilter(); clearTxnFilter(); current = v; render(); }
+  });
+
+  wireKeyboardShortcuts();
+}
+
+// ---------- keyboard shortcuts ----------
+// n = quick-add txn, / = focus ledger search, g then d/t/a/s = jump to view.
+function wireKeyboardShortcuts() {
+  let gPending = false, gTimer;
+  const GO = { d: 'dashboard', t: 'transactions', a: 'accounts', s: 'statement' };
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const el = document.activeElement;
+    const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+    const modalOpen = !document.getElementById('modal-backdrop').hidden;
+    if (typing || modalOpen) return;
+
+    if (gPending) {
+      gPending = false; clearTimeout(gTimer);
+      if (GO[e.key]) { e.preventDefault(); navigate(GO[e.key]); }
+      return;
+    }
+    if (e.key === 'g') { gPending = true; gTimer = setTimeout(() => { gPending = false; }, 1200); return; }
+    if (e.key === 'n') { e.preventDefault(); openForm('transactions'); return; }
+    if (e.key === '/') {
+      e.preventDefault();
+      if (current !== 'transactions') navigate('transactions');
+      document.querySelector('[data-txn-search]')?.focus();
+    }
   });
 }
 

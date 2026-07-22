@@ -55,7 +55,7 @@ const SCHEMAS = {
     title: 'expense',
     fields: [
       { name: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Rent, Groceries' },
-      { name: 'category', label: 'Category', type: 'select', options: EXPENSE_CATEGORIES, def: 'Housing', half: true },
+      { name: 'category', label: 'Category', type: 'select', options: EXPENSE_CATEGORIES, def: 'Housing', half: true, custom: true },
       { name: 'amount', label: 'Amount', type: 'number', required: true, step: '0.01', half: true },
       { name: 'frequency', label: 'How often', type: 'select', options: FREQ_OPTIONS, def: 'monthly', half: true },
       { name: 'accountId', label: 'Auto-pay from account', type: 'select', options: accountOptionsOptional, half: true, hint: 'Optional — posts automatically when due' },
@@ -73,7 +73,7 @@ const SCHEMAS = {
       { name: 'name', label: 'Name', type: 'text', required: true, placeholder: 'e.g. Netflix, Gym' },
       { name: 'amount', label: 'Amount', type: 'number', required: true, step: '0.01', half: true },
       { name: 'cycle', label: 'Billing cycle', type: 'select', options: SUB_CYCLES, def: 'monthly', half: true },
-      { name: 'category', label: 'Category', type: 'select', options: SUB_CATEGORIES, def: 'Entertainment', half: true },
+      { name: 'category', label: 'Category', type: 'select', options: SUB_CATEGORIES, def: 'Entertainment', half: true, custom: true },
       { name: 'nextRenewal', label: 'Next renewal', type: 'date', half: true },
       { name: 'accountId', label: 'Auto-pay from account', type: 'select', options: accountOptionsOptional, half: true, hint: 'Optional — posts automatically at renewal' },
       { name: 'notes', label: 'Notes', type: 'textarea' },
@@ -133,7 +133,7 @@ const SCHEMAS = {
       { name: 'description', label: 'Description', type: 'text', required: true, placeholder: 'e.g. Groceries, Salary, Pay off Visa' },
       { name: 'date', label: 'Date', type: 'date', required: true, def: todayISO(), half: true },
       { name: 'type', label: 'Type', type: 'select', options: TXN_TYPES, def: 'expense', half: true },
-      { name: 'category', label: 'Category', type: 'select', options: TXN_CATEGORIES, def: 'Other', half: true },
+      { name: 'category', label: 'Category', type: 'select', options: TXN_CATEGORIES, def: 'Other', half: true, custom: true },
       { name: 'accountId', label: 'Account', type: 'select', options: accountOptions, half: true, visibleIf: v => v.type !== 'debt' },
       { name: 'toAccountId', label: 'To account', type: 'select', options: accountOptions, half: true, hint: 'Transfers only', visibleIf: v => v.type === 'transfer' },
       { name: 'debtId', label: 'Person', type: 'select', options: debtOptions, half: true, visibleIf: v => v.type === 'debt' },
@@ -162,7 +162,7 @@ const SCHEMAS = {
   budgets: {
     title: 'budget',
     fields: [
-      { name: 'category', label: 'Category', type: 'select', options: EXPENSE_CATEGORIES, def: 'Housing' },
+      { name: 'category', label: 'Category', type: 'select', options: EXPENSE_CATEGORIES, def: 'Housing', custom: true },
       { name: 'monthlyLimit', label: 'Monthly limit', type: 'number', required: true, step: '0.01' },
       { name: 'notes', label: 'Notes', type: 'textarea' },
     ],
@@ -191,9 +191,16 @@ function fieldHtml(f, value) {
   let control;
   if (f.type === 'select') {
     const opts = resolveOptions(f);
+    // Preserve an off-list value (e.g. a previously-saved custom category) so
+    // editing round-trips it instead of silently snapping to the first option.
+    const known = opts.some(o => o.value === String(val));
+    const extraOpt = !known && val !== '' ? `<option value="${escapeHtml(val)}" selected>${escapeHtml(val)}</option>` : '';
+    const customOpt = f.custom ? `<option value="__custom__">Other…</option>` : '';
     control = `<select class="input" name="${f.name}" ${req}>
+      ${extraOpt}
       ${opts.map(o => `<option value="${escapeHtml(o.value)}" ${String(val) === o.value ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}
-    </select>`;
+      ${customOpt}
+    </select>${f.custom ? `<input class="input" type="text" data-custom-for="${f.name}" placeholder="New category name" style="margin-top:7px" hidden>` : ''}`;
   } else if (f.type === 'textarea') {
     control = `<textarea class="input" name="${f.name}" placeholder="${f.placeholder || ''}">${escapeHtml(val)}</textarea>`;
   } else {
@@ -304,6 +311,11 @@ export function openForm(collection, id = null, { prefill = null, onSaved = null
     const obj = {};
     schema.fields.forEach(f => {
       let v = fd.get(f.name);
+      // "Other…" on a custom select → read the free-text category instead.
+      if (v === '__custom__') {
+        const customEl = form.querySelector(`[data-custom-for="${f.name}"]`);
+        v = customEl ? customEl.value.trim() : '';
+      }
       if (f.type === 'number') v = v === '' || v == null ? '' : Number(v);
       obj[f.name] = v ?? '';
     });
@@ -328,6 +340,16 @@ export function openForm(collection, id = null, { prefill = null, onSaved = null
     });
   };
   if (schema.fields.some(f => f.visibleIf)) { applyVisibility(); form.addEventListener('input', applyVisibility); }
+
+  // Custom-category selects: "Other…" reveals a free-text input for the field.
+  form.addEventListener('change', e => {
+    const sel = e.target.closest('select[name]');
+    if (!sel) return;
+    const custom = form.querySelector(`[data-custom-for="${sel.name}"]`);
+    if (!custom) return;
+    if (sel.value === '__custom__') { custom.hidden = false; custom.focus(); }
+    else { custom.hidden = true; custom.value = ''; }
+  });
 
   // ---- fast-entry extras (transactions only) ----
   if (isTxn) setupTxnFastEntry(form, getValues);

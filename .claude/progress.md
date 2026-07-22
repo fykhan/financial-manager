@@ -68,18 +68,26 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
   for cross-field); dark `--muted` bumped to `#7d8590`; `aria-label` on edit/delete icon buttons. Focus
   trap already in `ui.js`.
 
-## Remaining (not started)
+- **Phase 8.1** selection re-render — `patchLists(collection)` in `app.js` re-renders only the affected
+  `list-*` fragment(s) (transactions → txn-accounts/savings/debts) on select/select-all instead of a
+  full `render()`, avoiding the scroll jump. Falls back to `render()` if no container found.
+- **Phase 8.2** statement month stepping — `‹ ›` buttons beside the presets; `stepStatementMonth(±1)` +
+  `isSingleMonth` in `views.js` step a single-calendar-month period, disabled for multi-month ranges.
+- **Phase 8.3** currency honesty — topbar `title="Display currency (no conversion)"` (already) + a note
+  in the Data modal that amounts aren't converted.
+- **Phase 8.4** custom categories — category selects flagged `custom: true` get an "Other…" option that
+  reveals a `[data-custom-for]` text input; `getValues` resolves `__custom__` to the typed value;
+  off-list values round-trip on edit (extra selected `<option>`). Backend columns are plain strings.
+- **Phase 8.5** keyboard shortcuts — `wireKeyboardShortcuts()` in `app.js`: `n` new txn, `/` focus
+  ledger search (navigating to Transactions first), `g` then `d/t/a/s` jump to view; ignored while
+  typing or a modal is open. Hint added to the Data modal.
 
-- **Phase 8.1–8.5** polish — selection re-render patching, statement month stepping `‹ ›`, currency
-  "(no conversion)" label (partly done in topbar title attr), custom categories ("Other…"), keyboard
-  shortcuts (`n`, `/`, `g`+`d/t/a/s`).
+## ALL PLAN PHASES COMPLETE
+
+Every item in `improvement-plan.md` (Phases 1–8) is implemented and committed on `main`.
+`node --test` green (56). No manual browser smoke test was possible this session (needs DB/login).
 
 ## Groundwork already in tree from before this session (uncommitted-then-committed under 240bf6c)
 
 `calc.js`: `addDays`, `nextOccurrence`, `monthlySpendComparison`, `dueSoon` extra fields + tests.
 `store.js`: `restore`. `ui.js`: focus trap + toast action. These back Phases 5 and 7.4.
-
-## Sequencing to follow next (per plan table) — only 8.1–8.5 left
-
-8.1–8.5 (polish batch).
-Test gate: `node --test` green; add tests for any new `calc.js` fn (5.x helpers already tested).

@@ -1207,6 +1207,26 @@ export function setStatementRange(from, to) {
   statementPeriod = { preset: 'custom', from: from ?? p.from, to: to ?? p.to };
 }
 
+const isoLocal = (y, m, d) => {
+  const dt = new Date(y, m, d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+};
+/** True when the active period is exactly one calendar month (first→last day). */
+function isSingleMonth(p) {
+  if (!p.from || !p.to) return false;
+  const f = new Date(p.from + 'T00:00:00');
+  return p.from === isoLocal(f.getFullYear(), f.getMonth(), 1)
+    && p.to === isoLocal(f.getFullYear(), f.getMonth() + 1, 0);
+}
+/** Step a single-month period by ±1 month (no-op for multi-month ranges). */
+export function stepStatementMonth(delta) {
+  const p = currentPeriod();
+  if (!isSingleMonth(p)) return;
+  const f = new Date(p.from + 'T00:00:00');
+  const y = f.getFullYear(), m = f.getMonth() + delta;
+  statementPeriod = { preset: 'custom', from: isoLocal(y, m, 1), to: isoLocal(y, m + 1, 0) };
+}
+
 function periodLabel(period) {
   if (period.preset && period.preset !== 'custom') {
     return STATEMENT_PRESETS.find(([k]) => k === period.preset)?.[1] || 'Custom period';
@@ -1223,6 +1243,10 @@ function periodSelector(period) {
         `).join('')}
       </div>
       <div class="flex center gap-8" style="flex-wrap:wrap">
+        <div class="flex center gap-8" role="group" aria-label="Step month">
+          <button type="button" class="btn btn-sm btn-ghost btn-icon" data-statement-step="-1" ${isSingleMonth(period) ? '' : 'disabled'} aria-label="Previous month" title="Previous month">‹</button>
+          <button type="button" class="btn btn-sm btn-ghost btn-icon" data-statement-step="1" ${isSingleMonth(period) ? '' : 'disabled'} aria-label="Next month" title="Next month">›</button>
+        </div>
         <label class="field-inline" style="font-size:12px;color:var(--muted)">From
           <input type="date" class="input input-sm" data-statement-date="from" value="${period.from || ''}" aria-label="From date">
         </label>
