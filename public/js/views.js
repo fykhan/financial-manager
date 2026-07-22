@@ -146,8 +146,46 @@ export function renderDashboard(data) {
 
   const accountsRow = accountsOverviewRow(data);
   const activity = dashboardActivityRow(data);
+  const recap = monthlyRecapPanel(data);
 
-  return `${tiles}${panels}${health}${accountsRow}${activity}`;
+  return `${tiles}${recap}${panels}${health}${accountsRow}${activity}`;
+}
+
+/**
+ * "Last month in review" — money in/out/net, top categories, biggest expense
+ * and savings for the previous calendar month. Reuses statement() with the
+ * last-month bounds. Renders nothing unless last month had posted transactions.
+ */
+function monthlyRecapPanel(data) {
+  const { from, to } = presetRange('last-month');
+  const st = statement(data, from, to);
+  if (!st.count) return '';
+
+  const topCats = st.byCategory.slice(0, 3);
+  const biggest = st.transactions
+    .filter(t => t.type === 'expense')
+    .reduce((max, t) => (Number(t.amount) > Number(max?.amount || 0) ? t : max), null);
+
+  return `<div class="panel" style="margin-bottom:24px">
+    <div class="flex between center" style="flex-wrap:wrap;gap:10px">
+      <h3 style="margin:0">Last month in review</h3>
+      <button type="button" class="btn btn-sm btn-ghost" data-recap-statement>Full statement →</button>
+    </div>
+    <div class="panel-sub">${monthLabel(from)}</div>
+    <div class="stat-grid" style="grid-template-columns:repeat(auto-fit,minmax(120px,1fr));margin:14px 0 4px">
+      <div class="stat"><div class="stat-label">Money in</div><div class="stat-value tabular text-good">${money(st.totalIncome, { cents: false })}</div></div>
+      <div class="stat"><div class="stat-label">Money out</div><div class="stat-value tabular text-crit">${money(st.totalExpense, { cents: false })}</div></div>
+      <div class="stat"><div class="stat-label">Net</div><div class="stat-value tabular ${st.net >= 0 ? 'text-good' : 'text-crit'}">${money(st.net, { cents: false })}</div></div>
+      <div class="stat"><div class="stat-label">Saved</div><div class="stat-value tabular">${money(st.savings.net, { cents: false })}</div></div>
+    </div>
+    ${topCats.length ? `<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border)">
+      <div class="panel-sub" style="margin-bottom:8px">Top spending</div>
+      ${topCats.map(c => miniRow(escapeHtml(c.category), money(c.amount))).join('')}
+    </div>` : ''}
+    ${biggest ? `<div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)">
+      ${miniRow('Biggest expense', `${escapeHtml(biggest.description || biggest.category || 'Expense')} · <strong>${money(biggest.amount)}</strong>`)}
+    </div>` : ''}
+  </div>`;
 }
 
 /**

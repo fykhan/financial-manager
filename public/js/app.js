@@ -253,6 +253,7 @@ function wire() {
     if (spendModeBtn) { setSpendMode(spendModeBtn.dataset.spendMode); return render(); }
     const txnCatBtn = e.target.closest('[data-txn-cat]');
     if (txnCatBtn) { setTxnFilter({ category: txnCatBtn.dataset.txnCat }); resetPage('txn-accounts'); return render(); }
+    if (e.target.closest('[data-recap-statement]')) { setStatementPreset('last-month'); return navigate('statement'); }
     if (statementPresetBtn) { setStatementPreset(statementPresetBtn.dataset.statementPreset); return render(); }
     if (statementExportBtn) {
       if (statementExportBtn.dataset.statementExport === 'csv') {
