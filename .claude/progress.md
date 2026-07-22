@@ -43,6 +43,13 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
 - **Phase 5.2** "Last month in review" recap panel — `monthlyRecapPanel` reuses `statement()` with
   `presetRange('last-month')`; money in/out/net/saved tiles, top-3 categories, biggest expense;
   "Full statement →" (`data-recap-statement`) sets the last-month preset + navigates.
+- **Phase 4.3** naming — Expenses page now has explicit "Recurring expenses" + "Budgets" section
+  headings (each with its own add button); nav label stays "Expenses".
+- **Phase 8.6** onboarding checklist — `onboardingChecklist(data)` first-run dashboard panel: 5 steps
+  (account → income → expense → savings goal → first txn), done-state derived from counts, "Add →"
+  per step, "load sample data", dismiss flag in `localStorage` (`gradplan.onboardDismiss`). Replaces
+  the bare empty state and shows on the populated dashboard until all done/dismissed. `data-onboard`
+  handled in `app.js`.
 - **Phase 5.3** Due-soon "Mark paid" — non-auto-pay rows get `data-mark-paid="kind:id"`; opens a
   prefilled expense form and, `onSaved`, rolls the source record's next-due date forward via
   `nextOccurrence`. Dashboard nav items (sidebar + bottom) show a `dueSoon(data, 3)` count badge
@@ -52,9 +59,6 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
 
 ## Remaining (not started)
 
-- **Phase 4.3** naming — rename Expenses page section headings to "Recurring expenses" / "Budgets"
-  (nav label stays "Expenses").
-- **Phase 8.6** onboarding checklist (dashboard first-run panel; localStorage dismiss flag).
 - **Phase 7.1–7.4** theme + a11y pass. Focus trap + `restore` groundwork ALREADY in `ui.js`/`store.js`.
   Remaining: effects toggle (`data-effects`), color-semantics cleanup, typography (drop uppercase from
   table cells/buttons/labels), inline field errors, `--muted` contrast bump, icon-button `aria-label`s.
@@ -69,5 +73,5 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
 
 ## Sequencing to follow next (per plan table)
 
-8.6 → 7.1–7.4 → 8.1–8.5.
+7.1–7.4 → 8.1–8.5.
 Test gate: `node --test` green; add tests for any new `calc.js` fn (5.x helpers already tested).

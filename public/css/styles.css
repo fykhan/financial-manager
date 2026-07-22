@@ -411,6 +411,16 @@ textarea.input { resize: vertical; min-height: 64px; }
 .stat .dot { width: 9px; height: 9px; display: inline-block; box-shadow: 0 0 8px currentColor; }
 .stat-click { cursor: pointer; text-align: left; width: 100%; font: inherit; color: inherit; }
 
+/* ---------- Onboarding checklist ---------- */
+.onboard { border-top: 2px solid var(--accent); }
+.onboard-step { padding: 8px 10px; border: 1px solid var(--border-2); background: var(--surface-2); font-size: 13.5px; }
+.onboard-step.is-done { opacity: 0.62; }
+.onboard-check {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; flex-shrink: 0;
+  border: 1px solid var(--border-2); color: var(--text-2); font-size: 12px;
+}
+.onboard-step.is-done .onboard-check { color: var(--accent-ink); background: var(--good); border-color: var(--good); }
+
 /* ---------- Dashboard grid ---------- */
 .dash-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 18px; margin-top: 18px; }
 .panel {

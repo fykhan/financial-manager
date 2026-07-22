@@ -103,8 +103,11 @@ export function renderDashboard(data) {
   const dti = assessDTI(s.dti);
   const statusColor = { good: 'var(--good)', warning: 'var(--warning)', serious: 'var(--serious)', critical: 'var(--critical)' };
 
+  const onboarding = onboardingChecklist(data);
   if (s.counts.income === 0 && s.counts.expenses === 0 && s.counts.installments === 0 && s.counts.subscriptions === 0) {
-    return `<div class="card">${empty('◧', 'Welcome to GradPlan', 'Add your income and expenses to see your full financial picture, or load sample data from ⚙ Data.', 'income')}</div>`;
+    // First run: the checklist replaces the bare empty state (unless dismissed,
+    // in which case fall back to the simple welcome card).
+    return onboarding || `<div class="card">${empty('◧', 'Welcome to GradPlan', 'Add your income and expenses to see your full financial picture, or load sample data from ⚙ Data.', 'income')}</div>`;
   }
 
   const net = s.netCashFlow;
@@ -148,7 +151,48 @@ export function renderDashboard(data) {
   const activity = dashboardActivityRow(data);
   const recap = monthlyRecapPanel(data);
 
-  return `${tiles}${recap}${panels}${health}${accountsRow}${activity}`;
+  return `${onboarding}${tiles}${recap}${panels}${health}${accountsRow}${activity}`;
+}
+
+const ONBOARD_DISMISS_KEY = 'gradplan.onboardDismiss';
+
+/**
+ * First-run "get started" checklist. Each step's done-state derives purely from
+ * data counts (no new persistence) — only the dismissed flag lives in
+ * localStorage. Renders nothing once every step is done or the user dismisses it.
+ */
+function onboardingChecklist(data) {
+  if (localStorage.getItem(ONBOARD_DISMISS_KEY)) return '';
+  const steps = [
+    { done: (data.accounts || []).length > 0, label: 'Add a bank account or wallet', add: 'accounts', icon: '◈' },
+    { done: (data.income || []).length > 0, label: 'Add your income', add: 'income', icon: '↗' },
+    { done: (data.expenses || []).length > 0, label: 'Add a recurring expense', add: 'expenses', icon: '↘' },
+    { done: (data.savings || []).length > 0, label: 'Set a savings goal', add: 'savings', icon: '◎' },
+    { done: (data.transactions || []).length > 0, label: 'Log your first transaction', add: 'transactions', icon: '▤' },
+  ];
+  const doneCount = steps.filter(s => s.done).length;
+  if (doneCount === steps.length) return '';
+
+  return `<div class="panel onboard" style="margin-bottom:24px">
+    <div class="flex between center" style="flex-wrap:wrap;gap:10px">
+      <h3 style="margin:0">Get started</h3>
+      <button type="button" class="icon-btn-sm" data-onboard="dismiss" title="Dismiss" aria-label="Dismiss checklist">✕</button>
+    </div>
+    <div class="panel-sub">${doneCount} of ${steps.length} done — set up your plan in a few steps</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:14px">
+      ${steps.map(s => `<div class="flex between center onboard-step ${s.done ? 'is-done' : ''}">
+        <span class="flex center gap-8">
+          <span class="onboard-check" aria-hidden="true">${s.done ? '✓' : s.icon}</span>
+          <span>${s.label}</span>
+        </span>
+        ${s.done ? '<span class="badge good">Done</span>'
+          : `<button type="button" class="btn btn-sm" data-add="${s.add}">Add →</button>`}
+      </div>`).join('')}
+    </div>
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <button type="button" class="btn btn-sm btn-ghost" data-onboard="sample">↺ Or load sample data</button>
+    </div>
+  </div>`;
 }
 
 /**
@@ -398,6 +442,9 @@ export function renderExpenses(data) {
       { label: 'Line items', value: num(list.length) },
     ])}
     <div style="margin:20px 0">${spendingByCategoryPanel(data, { title: 'Spending by category' })}</div>
+    <div class="section-head"><h2>Recurring expenses</h2>
+      <button class="btn btn-sm btn-primary" data-add="expenses">+ Add expense</button>
+    </div>
     <div id="list-expenses">${expensesListFragment(data)}</div>`;
 
   return `${expenseSection}${renderBudgetsPanel(data)}`;
