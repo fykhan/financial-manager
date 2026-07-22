@@ -688,6 +688,26 @@ let accountFilter = null;
 export function setAccountFilter(id) { accountFilter = accountFilter === id ? null : id; clearSelection('transactions'); }
 export function clearAccountFilter() { accountFilter = null; }
 
+// Transactions-view search/filters (module-local, like accountFilter/spendMode).
+// Reset on navigate() so leaving and returning starts clean.
+let txnFilter = { text: '', category: '', accountId: '' };
+export function setTxnFilter(patch) { txnFilter = { ...txnFilter, ...patch }; }
+export function clearTxnFilter() { txnFilter = { text: '', category: '', accountId: '' }; }
+
+/** Apply the Transactions-view filters (text / category / account) to a list. */
+function applyTxnFilter(transactions) {
+  const q = txnFilter.text.trim().toLowerCase();
+  return transactions.filter(t => {
+    if (txnFilter.category && (t.category || 'Other') !== txnFilter.category) return false;
+    if (txnFilter.accountId && t.accountId !== txnFilter.accountId && t.toAccountId !== txnFilter.accountId) return false;
+    if (q) {
+      const hay = `${t.description || ''} ${t.category || ''} ${t.notes || ''} ${t.amount ?? ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
 function accountCardsFragment(data) {
   const accounts = data.accounts || [];
   const transactions = data.transactions || [];
@@ -705,12 +725,17 @@ function txnAccountsListFragment(data) {
   const debtName = id => (data.debts || []).find(d => d.id === id)?.person || '—';
   const savingName = id => (data.savings || []).find(sv => sv.id === id)?.name || '—';
 
-  const filtered = accountFilter
+  const base = accountFilter
     ? transactions.filter(t => t.accountId === accountFilter || t.toAccountId === accountFilter)
     : transactions;
+  const filtered = applyTxnFilter(base);
   const sorted = [...filtered].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   if (!sorted.length) {
-    return `<div class="text-muted" style="padding:12px 0">${accountFilter ? 'No transactions for this account yet.' : 'No transactions logged yet.'}</div>`;
+    const activeFilter = txnFilter.text || txnFilter.category || txnFilter.accountId;
+    const msg = activeFilter ? 'No transactions match your filters.'
+      : accountFilter ? 'No transactions for this account yet.'
+      : 'No transactions logged yet.';
+    return `<div class="text-muted" style="padding:12px 0">${msg}</div>`;
   }
   const { pageItems, page, totalPages } = paginate('txn-accounts', sorted);
 
@@ -815,8 +840,39 @@ function recentAccountsLedger(data) {
 }
 
 // ---------------- Transactions (top-level ledger) ----------------
-// Search + filter controls are added in Phase 6; placeholder keeps the view self-contained until then.
-function txnFilterControls() { return ''; }
+/** Search box + category chips + account select for the Transactions ledger.
+ * Text input patches only the list fragment (see app.js) so it keeps focus;
+ * chips/select trigger a full render so their active state updates. */
+function txnFilterControls(data) {
+  const transactions = data.transactions || [];
+  const accounts = data.accounts || [];
+
+  // Categories actually present, most-used first.
+  const counts = new Map();
+  transactions.forEach(t => { const c = t.category || 'Other'; counts.set(c, (counts.get(c) || 0) + 1); });
+  const cats = [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+
+  const chip = (label, value, active) =>
+    `<button type="button" class="btn btn-sm ${active ? 'btn-primary' : 'btn-ghost'}" data-txn-cat="${escapeHtml(value)}" aria-pressed="${active}">${escapeHtml(label)}</button>`;
+
+  const catChips = cats.length ? `<div class="flex wrap gap-8" style="margin-top:10px">
+    ${chip('All', '', !txnFilter.category)}
+    ${cats.map(c => chip(c, c, txnFilter.category === c)).join('')}
+  </div>` : '';
+
+  const accountOptions = ['<option value="">All accounts</option>']
+    .concat(accounts.map(a => `<option value="${a.id}" ${txnFilter.accountId === a.id ? 'selected' : ''}>${escapeHtml(a.name)}</option>`))
+    .join('');
+
+  return `<div class="section" style="margin-bottom:8px">
+    <div class="flex wrap gap-12 center">
+      <input type="search" class="input input-sm" data-txn-search placeholder="Search description, category, notes…"
+        value="${escapeHtml(txnFilter.text)}" style="flex:1;min-width:180px" aria-label="Search transactions">
+      <select class="input input-sm" data-txn-account aria-label="Filter by account" style="min-width:150px">${accountOptions}</select>
+    </div>
+    ${catChips}
+  </div>`;
+}
 
 export function renderTransactions(data) {
   const accounts = data.accounts || [];
@@ -904,7 +960,10 @@ function accountCard(a, transactions, selected = false) {
   return `<div class="panel account-card ${selected ? 'selected' : ''}" data-account-card="${a.id}" title="Click to show only this account's transactions">
     <div class="flex between center" style="margin-bottom:2px">
       <h3 style="margin:0">${escapeHtml(a.name)}</h3>
-      ${rowActions('accounts', a.id)}
+      <div class="flex center gap-8">
+        <button type="button" class="btn btn-sm ${selected ? 'btn-primary' : 'btn-ghost'}" data-account-filter="${a.id}" aria-pressed="${selected}" title="Show only this account's transactions">⧩ ${selected ? 'Filtering' : 'Filter'}</button>
+        ${rowActions('accounts', a.id)}
+      </div>
     </div>
     <div class="panel-sub">${titleCase(a.type)}</div>
     ${isCredit ? `

@@ -8,9 +8,9 @@ import {
   viewTitle, renderDashboard, renderTransactions, renderIncome, renderExpenses,
   renderInstallments, renderSubscriptions, renderSavings, renderAccounts, renderDebts,
   renderStatement, setStatementPreset, setStatementRange, statementCSV, statementFilename, statementDocument,
-  setAccountFilter, clearAccountFilter, renderDrillDown, drillDownTitle,
+  setAccountFilter, clearAccountFilter, setTxnFilter, clearTxnFilter, renderDrillDown, drillDownTitle,
   toggleSelect, selectAll, clearSelection, clearAllSelections, getSelectedIds,
-  setPage, resetAllPages, LIST_FRAGMENTS, setSpendMode,
+  setPage, resetPage, resetAllPages, LIST_FRAGMENTS, setSpendMode,
 } from './views.js';
 
 const RENDERERS = {
@@ -45,6 +45,7 @@ function render() {
 function navigate(view) {
   if (!RENDERERS[view]) return;
   clearAccountFilter();
+  clearTxnFilter();
   clearAllSelections();
   resetAllPages();
   current = view;
@@ -222,6 +223,7 @@ function wire() {
     const selectBox = e.target.closest('[data-select]');
     const bulkDeleteBtn = e.target.closest('[data-bulk-delete]');
     const pageNavBtn = e.target.closest('[data-page-nav]');
+    const accountFilterBtn = e.target.closest('[data-account-filter]');
     const accountCard = e.target.closest('[data-account-card]');
 
     // Order matters: edit/delete/select controls are nested inside the
@@ -249,6 +251,8 @@ function wire() {
     }
     if (clearFilterBtn) { clearAccountFilter(); return render(); }
     if (spendModeBtn) { setSpendMode(spendModeBtn.dataset.spendMode); return render(); }
+    const txnCatBtn = e.target.closest('[data-txn-cat]');
+    if (txnCatBtn) { setTxnFilter({ category: txnCatBtn.dataset.txnCat }); resetPage('txn-accounts'); return render(); }
     if (statementPresetBtn) { setStatementPreset(statementPresetBtn.dataset.statementPreset); return render(); }
     if (statementExportBtn) {
       if (statementExportBtn.dataset.statementExport === 'csv') {
@@ -296,11 +300,16 @@ function wire() {
       if (container && renderFragment) container.innerHTML = renderFragment(store.getData());
       return;
     }
+    // The explicit filter button is checked before the whole-card click (it's nested inside).
+    if (accountFilterBtn) { setAccountFilter(accountFilterBtn.dataset.accountFilter); return render(); }
     if (accountCard) { setAccountFilter(accountCard.dataset.accountCard); return render(); }
   });
 
-  // Statement date pickers fire 'change', not 'click' — handle them separately.
+  // Statement date pickers + Transactions account filter fire 'change', not 'click'.
   document.getElementById('view-container').addEventListener('change', e => {
+    const txnAccount = e.target.closest('[data-txn-account]');
+    if (txnAccount) { setTxnFilter({ accountId: txnAccount.value }); resetPage('txn-accounts'); return render(); }
+
     const dateInput = e.target.closest('[data-statement-date]');
     if (!dateInput) return;
     const from = document.querySelector('[data-statement-date="from"]')?.value || '';
@@ -309,13 +318,28 @@ function wire() {
     render();
   });
 
+  // Ledger search: debounced, and patches ONLY the list fragment so the input
+  // keeps focus (a full render would blow away the field mid-type).
+  let txnSearchTimer;
+  document.getElementById('view-container').addEventListener('input', e => {
+    const search = e.target.closest('[data-txn-search]');
+    if (!search) return;
+    clearTimeout(txnSearchTimer);
+    txnSearchTimer = setTimeout(() => {
+      setTxnFilter({ text: search.value });
+      resetPage('txn-accounts');
+      const container = document.getElementById('list-txn-accounts');
+      if (container) container.innerHTML = LIST_FRAGMENTS['txn-accounts'](store.getData());
+    }, 200);
+  });
+
   // Re-render whenever the store changes.
   store.subscribe(render);
 
   // Hash routing (back/forward + deep links)
   window.addEventListener('hashchange', () => {
     const v = location.hash.replace('#', '');
-    if (RENDERERS[v] && v !== current) { clearAccountFilter(); current = v; render(); }
+    if (RENDERERS[v] && v !== current) { clearAccountFilter(); clearTxnFilter(); current = v; render(); }
   });
 }
 

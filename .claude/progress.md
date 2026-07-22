@@ -30,9 +30,13 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
   (Home / Txns / **+** center / Report / More), CSS `.bottom-nav*` (< 900px, safe-area padding, FAB
   hidden below the breakpoint, view-container + toast-host cleared), wired in `app.js` (view tabs →
   `navigate()`, center → `quickLog`, More → sidebar sheet, active tab synced in `render()`).
-- **NOTE:** `txnFilterControls()` in `views.js` is a **stub returning `''`** — full search/filters land
-  in Phase 6.1. `txnAccountsListFragment` still keys off `accountFilter` only (fine: null on the
-  Transactions page → shows all).
+- **Phase 6.1** ledger search + filters — DONE: module `txnFilter = { text, category, accountId }` in
+  `views.js` (`setTxnFilter`/`clearTxnFilter`, cleared on `navigate()`/hashchange); `txnFilterControls`
+  now renders a debounced search box, most-used category chips, and an account select;
+  `applyTxnFilter` applied in `txnAccountsListFragment` (combined with `accountFilter`). Search patches
+  only `#list-txn-accounts` (keeps focus); chips/select full-render. Page reset on filter change.
+- **Phase 6.2** account-card "⧩ Filter" ghost button (`data-account-filter`, shows "Filtering" when
+  active) beside the whole-card click, handled before the card in `app.js`.
 - **TODO before committing Phase 4:** also add Transactions to the **bottom nav** — but that's Phase 3.2,
   do it there. Just commit 4.1 + 4.2 as-is next.
 
@@ -40,11 +44,6 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
 
 - **Phase 4.3** naming — rename Expenses page section headings to "Recurring expenses" / "Budgets"
   (nav label stays "Expenses").
-- **Phase 6.1** ledger search + filters — replace the `txnFilterControls` stub; module-level
-  `txnFilter = { text, category, accountId }` in `views.js`, cleared on `navigate()`; debounced text
-  input patching only `#list-txn-accounts` via `LIST_FRAGMENTS['txn-accounts']`; make
-  `txnAccountsListFragment` apply `txnFilter`.
-- **Phase 6.2** account-card "⧩ Filter" ghost button.
 - **Phase 5.1** `monthlySpendComparison` (ALREADY in `calc.js` + tested) → wire dashboard tile sub-lines
   "↓ 8% vs Jun".
 - **Phase 5.2** "Last month in review" recap panel (reuse `statement()` with last-month bounds).
@@ -67,5 +66,5 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
 
 ## Sequencing to follow next (per plan table)
 
-6.1/6.2 search/filters → 5.1–5.3 → 8.6 → 7.1–7.4 → 8.1–8.5.
+5.1–5.3 → 8.6 → 7.1–7.4 → 8.1–8.5.
 Test gate: `node --test` green; add tests for any new `calc.js` fn (5.x helpers already tested).
