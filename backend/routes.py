@@ -119,11 +119,36 @@ def update_record(collection: str, record_id: str, body: dict, session: Session 
     return OutSchema.model_validate(record)
 
 
+def _cascade_delete(session: Session, collection: str, record_id: str) -> None:
+    """Clean up rows that reference a just-deleted account/debt/saving so
+    nothing is orphaned. Mirrors the client cascade in store.js; runs in the
+    same transaction as the delete, so a direct API call (or a client that
+    failed mid-cascade) can't leave dangling transactions or auto-pay links."""
+    if collection == "accounts":
+        for txn in session.exec(
+            select(Transaction).where(
+                (Transaction.account_id == record_id) | (Transaction.to_account_id == record_id)
+            )
+        ).all():
+            session.delete(txn)
+        for SourceModel in (Income, Expense, Subscription, Installment):
+            for src in session.exec(select(SourceModel).where(SourceModel.account_id == record_id)).all():
+                src.account_id = None
+                session.add(src)
+    elif collection == "debts":
+        for txn in session.exec(select(Transaction).where(Transaction.debt_id == record_id)).all():
+            session.delete(txn)
+    elif collection == "savings":
+        for txn in session.exec(select(Transaction).where(Transaction.saving_id == record_id)).all():
+            session.delete(txn)
+
+
 @router.delete("/{collection}/{record_id}", status_code=204)
 def delete_record(collection: str, record_id: str, session: Session = Depends(get_session)):
     Model, *_ = _entry(collection)
     record = session.get(Model, record_id)
     if record:
+        _cascade_delete(session, collection, record_id)
         session.delete(record)
         session.commit()
     return Response(status_code=204)

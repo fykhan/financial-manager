@@ -3,7 +3,7 @@
 import * as store from './store.js';
 import { setCurrency, CURRENCIES, todayISO } from './format.js';
 import { initModalChrome, openModal, closeModal, toast, confirmDialog, download } from './ui.js';
-import { openForm, hasForm, openAdjustBalance } from './forms.js';
+import { openForm, hasForm, openAdjustBalance, deleteRecord } from './forms.js';
 import { dueSoon, nextOccurrence } from './calc.js';
 import {
   viewTitle, renderDashboard, renderTransactions, renderIncome, renderExpenses,
@@ -286,14 +286,7 @@ function wire() {
     // clickable account card, so they must be checked before it.
     if (editBtn) return openForm(editBtn.dataset.edit, editBtn.dataset.id);
     if (delBtn) {
-      const { collection, id } = { collection: delBtn.dataset.del, id: delBtn.dataset.id };
-      const rec = store.getById(collection, id);
-      if (!rec) return;
-      const name = rec.name || rec.source || rec.description || rec.category || rec.person || 'item';
-      try {
-        await store.remove(collection, id);
-        toast(`Deleted “${name}”`, '', { actionLabel: 'Undo', duration: 6000, onAction: () => store.restore(collection, rec) });
-      } catch { /* store.js already toasted */ }
+      await deleteRecord(delBtn.dataset.del, delBtn.dataset.id);
       return;
     }
     if (addBtn) {
@@ -365,6 +358,19 @@ function wire() {
       const collection = bulkDeleteBtn.dataset.bulkDelete;
       const ids = getSelectedIds(collection);
       if (!ids.length) return;
+      // Cascade collections (debts here) also take their transactions with them.
+      if (store.CASCADE_COLLECTIONS.includes(collection)) {
+        try {
+          const snapshots = [];
+          for (const id of ids) { const s = await store.removeCascade(collection, id); if (s) snapshots.push(s); }
+          clearSelection(collection);
+          toast(`Deleted ${snapshots.length} item${snapshots.length === 1 ? '' : 's'}`, '', {
+            actionLabel: 'Undo', duration: 6000,
+            onAction: () => snapshots.forEach(s => store.restoreCascade(s)),
+          });
+        } catch { /* store.js already toasted */ }
+        return;
+      }
       const snapshot = ids.map(id => store.getById(collection, id)).filter(Boolean);
       try {
         await Promise.all(ids.map(id => store.remove(collection, id)));

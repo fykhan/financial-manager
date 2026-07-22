@@ -1,7 +1,7 @@
 // forms.js — schema-driven add/edit forms with live calculation previews
 
 import * as store from './store.js';
-import { openModal, closeModal, toast } from './ui.js';
+import { openModal, closeModal, toast, confirmDialog } from './ui.js';
 import { installmentStatus, savingStatus, toMonthly, FREQ_LABELS, amortizedPayment, accountBalance } from './calc.js';
 import { money, todayISO, escapeHtml, titleCase } from './format.js';
 
@@ -189,6 +189,47 @@ export function labelOf(collection) { return SCHEMAS[collection].title; }
  * report/guide view). Used to decide whether to show the "+ Add" button. */
 export function hasForm(collection) { return collection in SCHEMAS; }
 
+const recordName = r => r.name || r.source || r.description || r.category || r.person || 'item';
+
+/** Delete a record with an Undo toast. For collections other records reference
+ * (accounts/debts/savings) this cascades — it also removes the record's
+ * transactions and clears any auto-pay links, all undoable as one action, and
+ * warns first when there's collateral. Returns true only if the delete ran and
+ * succeeded (false if cancelled or the request failed — store.js toasts that). */
+export async function deleteRecord(collection, id) {
+  const record = store.getById(collection, id);
+  if (!record) return false;
+  const name = recordName(record);
+  const cascade = store.CASCADE_COLLECTIONS.includes(collection);
+
+  let txnCount = 0;
+  if (cascade) {
+    const { txnCount: tc, linkCount } = store.cascadeImpact(collection, id);
+    txnCount = tc;
+    if (tc || linkCount) {
+      const parts = [];
+      if (tc) parts.push(`delete ${tc} linked transaction${tc === 1 ? '' : 's'}`);
+      if (linkCount) parts.push(`stop auto-pay on ${linkCount} item${linkCount === 1 ? '' : 's'}`);
+      const ok = await confirmDialog(`Delete “${name}”?`, `This will also ${parts.join(' and ')}.`, { okLabel: 'Delete' });
+      if (!ok) return false;
+    }
+  }
+
+  try {
+    if (cascade) {
+      const snapshot = await store.removeCascade(collection, id);
+      const extra = txnCount ? ` + ${txnCount} transaction${txnCount === 1 ? '' : 's'}` : '';
+      toast(`Deleted “${name}”${extra}`, '', { actionLabel: 'Undo', duration: 6000, onAction: () => store.restoreCascade(snapshot) });
+    } else {
+      await store.remove(collection, id);
+      toast(`Deleted “${name}”`, '', { actionLabel: 'Undo', duration: 6000, onAction: () => store.restore(collection, record) });
+    }
+    return true;
+  } catch {
+    return false; // store.js already toasted the failure
+  }
+}
+
 function resolveOptions(f) {
   const opts = typeof f.options === 'function' ? f.options() : f.options;
   return opts.map(o => (typeof o === 'object' ? o : { value: o, label: FREQ_LABELS[o] || titleCase(o) }));
@@ -367,14 +408,8 @@ export function openForm(collection, id = null, { prefill = null, onSaved = null
   const delBtn = form.querySelector('[data-act="delete"]');
   if (delBtn) delBtn.addEventListener('click', async () => {
     delBtn.disabled = true;
-    const name = record.name || record.source || record.description || record.category || record.person || 'item';
-    try {
-      await store.remove(collection, id);
-      toast(`Deleted “${name}”`, '', { actionLabel: 'Undo', duration: 6000, onAction: () => store.restore(collection, record) });
-      closeModal();
-    } catch {
-      delBtn.disabled = false; // store.js already toasted the failure
-    }
+    if (await deleteRecord(collection, id)) closeModal();
+    else delBtn.disabled = false; // cancelled or failed — keep the modal open
   });
 
   // "Save & add another" reuses the normal submit path, flagged so success

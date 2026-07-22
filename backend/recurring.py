@@ -15,7 +15,7 @@ from datetime import date, timedelta
 
 from sqlmodel import Session, select
 
-from backend.models import Expense, Income, Installment, Subscription, Transaction
+from backend.models import Account, Expense, Income, Installment, Subscription, Transaction
 
 FREQ_PER_YEAR = {
     "weekly": 52,
@@ -71,9 +71,12 @@ def _amortized_payment(principal: float, apr: float, term_months: int) -> float:
 def apply_due_transactions(session: Session) -> None:
     today = date.today()
     new_txns: list[Transaction] = []
+    # Guard against auto-pay links left dangling by a deleted account — without
+    # this, a deleted account_id would post transactions to a ghost forever.
+    account_ids = {a.id for a in session.exec(select(Account)).all()}
 
     for inc in session.exec(select(Income)).all():
-        if not inc.account_id or not inc.next_date or FREQ_PER_YEAR.get(inc.frequency, 0) <= 0:
+        if inc.account_id not in account_ids or not inc.next_date or FREQ_PER_YEAR.get(inc.frequency, 0) <= 0:
             continue
         guard = 0
         while inc.next_date and date.fromisoformat(inc.next_date) <= today and guard < MAX_CATCHUP_PERIODS:
@@ -86,7 +89,7 @@ def apply_due_transactions(session: Session) -> None:
         session.add(inc)
 
     for exp in session.exec(select(Expense)).all():
-        if not exp.account_id or not exp.next_date or FREQ_PER_YEAR.get(exp.frequency, 0) <= 0:
+        if exp.account_id not in account_ids or not exp.next_date or FREQ_PER_YEAR.get(exp.frequency, 0) <= 0:
             continue
         guard = 0
         while exp.next_date and date.fromisoformat(exp.next_date) <= today and guard < MAX_CATCHUP_PERIODS:
@@ -99,7 +102,7 @@ def apply_due_transactions(session: Session) -> None:
         session.add(exp)
 
     for sub in session.exec(select(Subscription)).all():
-        if not sub.account_id or not sub.next_renewal or FREQ_PER_YEAR.get(sub.cycle, 0) <= 0:
+        if sub.account_id not in account_ids or not sub.next_renewal or FREQ_PER_YEAR.get(sub.cycle, 0) <= 0:
             continue
         guard = 0
         while sub.next_renewal and date.fromisoformat(sub.next_renewal) <= today and guard < MAX_CATCHUP_PERIODS:
@@ -112,7 +115,7 @@ def apply_due_transactions(session: Session) -> None:
         session.add(sub)
 
     for it in session.exec(select(Installment)).all():
-        if not it.account_id or not it.next_due_date or not it.start_date:
+        if it.account_id not in account_ids or not it.next_due_date or not it.start_date:
             continue
         final_date = _add_months(date.fromisoformat(it.start_date), it.term_months)
         payment = it.monthly_payment or _amortized_payment(it.principal, it.apr, it.term_months)
