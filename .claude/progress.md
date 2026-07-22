@@ -37,6 +37,16 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
   only `#list-txn-accounts` (keeps focus); chips/select full-render. Page reset on filter change.
 - **Phase 6.2** account-card "⧩ Filter" ghost button (`data-account-filter`, shows "Filtering" when
   active) beside the whole-card click, handled before the card in `app.js`.
+- **Phase 5.1** month-over-month spend delta — `statTile` gained `sub2`/`sub2Class`; `spendDeltaLine`
+  builds "↓ 8% spent vs Jun" from `monthlySpendComparison` (null-safe, hidden when no prev month) on
+  the Monthly-expenses tile.
+- **Phase 5.2** "Last month in review" recap panel — `monthlyRecapPanel` reuses `statement()` with
+  `presetRange('last-month')`; money in/out/net/saved tiles, top-3 categories, biggest expense;
+  "Full statement →" (`data-recap-statement`) sets the last-month preset + navigates.
+- **Phase 5.3** Due-soon "Mark paid" — non-auto-pay rows get `data-mark-paid="kind:id"`; opens a
+  prefilled expense form and, `onSaved`, rolls the source record's next-due date forward via
+  `nextOccurrence`. Dashboard nav items (sidebar + bottom) show a `dueSoon(data, 3)` count badge
+  updated in `render()`.
 - **TODO before committing Phase 4:** also add Transactions to the **bottom nav** — but that's Phase 3.2,
   do it there. Just commit 4.1 + 4.2 as-is next.
 
@@ -44,13 +54,6 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
 
 - **Phase 4.3** naming — rename Expenses page section headings to "Recurring expenses" / "Budgets"
   (nav label stays "Expenses").
-- **Phase 5.1** `monthlySpendComparison` (ALREADY in `calc.js` + tested) → wire dashboard tile sub-lines
-  "↓ 8% vs Jun".
-- **Phase 5.2** "Last month in review" recap panel (reuse `statement()` with last-month bounds).
-- **Phase 5.3** actionable Due-soon "Mark paid" — `nextOccurrence`/`addDays` ALREADY in `calc.js` +
-  tested, and `dueSoon` items ALREADY carry `accountId`/`dateField`/`frequency`/`category`. Wire the
-  `data-mark-paid="kind:id"` button → prefilled form via `onSaved` advancing the source date; nav badge
-  from `dueSoon(data, 3)`.
 - **Phase 8.6** onboarding checklist (dashboard first-run panel; localStorage dismiss flag).
 - **Phase 7.1–7.4** theme + a11y pass. Focus trap + `restore` groundwork ALREADY in `ui.js`/`store.js`.
   Remaining: effects toggle (`data-effects`), color-semantics cleanup, typography (drop uppercase from
@@ -66,5 +69,5 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
 
 ## Sequencing to follow next (per plan table)
 
-5.1–5.3 → 8.6 → 7.1–7.4 → 8.1–8.5.
+8.6 → 7.1–7.4 → 8.1–8.5.
 Test gate: `node --test` green; add tests for any new `calc.js` fn (5.x helpers already tested).

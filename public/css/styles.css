@@ -234,6 +234,13 @@ body::after {
 }
 .nav-item[aria-current="true"] .nav-ico { opacity: 1; color: var(--accent); }
 .nav-ico { font-size: 15px; width: 18px; text-align: center; opacity: 0.7; }
+.nav-item { position: relative; }
+.nav-badge {
+  display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px;
+  margin-left: auto; font-size: 11px; font-weight: 700; line-height: 1; letter-spacing: 0;
+  color: var(--accent-ink); background: var(--warning); border-radius: 9px;
+}
+.bottom-nav-item .nav-badge { position: absolute; top: 5px; left: 50%; transform: translateX(6px); margin: 0; }
 
 .sidebar-footer { display: flex; gap: 6px; padding-top: 16px; border-top: 1px solid var(--border-2); }
 .sidebar-footer .btn { flex: 1; }

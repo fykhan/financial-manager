@@ -4,6 +4,7 @@ import * as store from './store.js';
 import { setCurrency, CURRENCIES, todayISO } from './format.js';
 import { initModalChrome, openModal, closeModal, toast, confirmDialog, download } from './ui.js';
 import { openForm } from './forms.js';
+import { dueSoon, nextOccurrence } from './calc.js';
 import {
   viewTitle, renderDashboard, renderTransactions, renderIncome, renderExpenses,
   renderInstallments, renderSubscriptions, renderSavings, renderAccounts, renderDebts,
@@ -40,6 +41,23 @@ function render() {
   });
   // "+ Add" button only where a collection is active; "+ Log" is always shown.
   document.getElementById('btn-add-primary').style.display = current === 'dashboard' ? 'none' : '';
+
+  // Due-soon count badge on the Dashboard nav items (sidebar + bottom nav).
+  updateDueBadges(dueSoon(data, 3).length);
+}
+
+/** Show/update a small count badge on every Dashboard nav item. */
+function updateDueBadges(count) {
+  document.querySelectorAll('[data-view="dashboard"]').forEach(item => {
+    let badge = item.querySelector('.nav-badge');
+    if (count > 0) {
+      if (!badge) { badge = document.createElement('span'); badge.className = 'nav-badge'; item.appendChild(badge); }
+      badge.textContent = count;
+      badge.setAttribute('aria-label', `${count} due soon`);
+    } else if (badge) {
+      badge.remove();
+    }
+  });
 }
 
 function navigate(view) {
@@ -254,6 +272,21 @@ function wire() {
     const txnCatBtn = e.target.closest('[data-txn-cat]');
     if (txnCatBtn) { setTxnFilter({ category: txnCatBtn.dataset.txnCat }); resetPage('txn-accounts'); return render(); }
     if (e.target.closest('[data-recap-statement]')) { setStatementPreset('last-month'); return navigate('statement'); }
+    const markPaidBtn = e.target.closest('[data-mark-paid]');
+    if (markPaidBtn) {
+      const [kind, id] = markPaidBtn.dataset.markPaid.split(':');
+      const item = dueSoon(store.getData()).find(i => i.kind === kind && i.id === id);
+      if (!item) return;
+      const collection = { subscription: 'subscriptions', expense: 'expenses', installment: 'installments' }[kind];
+      return openForm('transactions', null, {
+        prefill: { type: 'expense', amount: item.amount, description: item.name, date: todayISO(), category: item.category || '' },
+        // On save, roll the source record's next-due date forward one cycle.
+        onSaved: async () => {
+          if (!store.getById(collection, id)) return;
+          await store.update(collection, id, { [item.dateField]: nextOccurrence(item.date, item.frequency) });
+        },
+      });
+    }
     if (statementPresetBtn) { setStatementPreset(statementPresetBtn.dataset.statementPreset); return render(); }
     if (statementExportBtn) {
       if (statementExportBtn.dataset.statementExport === 'csv') {

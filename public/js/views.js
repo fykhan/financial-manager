@@ -307,6 +307,9 @@ function dueSoonPanel(data) {
         <td class="num" data-label="Amount">${money(i.amount)}</td>
         <td data-label="Status">${i.days <= 0 ? '<span class="badge crit">Due now</span>' : `<span class="badge ${i.days <= 3 ? 'warn' : ''}">in ${i.days} day${i.days === 1 ? '' : 's'}</span>`}</td>
         <td class="cell-muted" data-label="Date">${dateLabel(i.date)}</td>
+        <td data-label="">${i.accountId
+          ? '<span class="cell-muted" style="font-size:12px">auto-pay</span>'
+          : `<button type="button" class="btn btn-sm btn-ghost" data-mark-paid="${i.kind}:${i.id}">Mark paid</button>`}</td>
       </tr>`).join('')}
     </tbody></table></div>
   </div>`;
