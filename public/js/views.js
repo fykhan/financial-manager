@@ -1060,15 +1060,17 @@ function accountCard(a, transactions, selected = false) {
   const limit = Number(a.creditLimit) || 0;
   const util = isCredit && limit > 0 ? bal / limit : 0;
   return `<div class="panel account-card ${selected ? 'selected' : ''}" data-account-card="${a.id}" title="Click to show only this account's transactions">
-    <div class="flex between center" style="margin-bottom:2px">
+    <div style="margin-bottom:2px">
       <h3 style="margin:0">${escapeHtml(a.name)}</h3>
+    </div>
+    <div class="flex between center wrap gap-8">
+      <div class="panel-sub" style="margin:0">${titleCase(a.type)}</div>
       <div class="flex center gap-8">
-        <button type="button" class="btn btn-sm btn-ghost" data-adjust-balance="${a.id}" title="Set this account's real balance and log the difference">⇄ Adjust</button>
-        <button type="button" class="btn btn-sm ${selected ? 'btn-primary' : 'btn-ghost'}" data-account-filter="${a.id}" aria-pressed="${selected}" title="Show only this account's transactions">⧩ ${selected ? 'Filtering' : 'Filter'}</button>
+        <button type="button" class="btn btn-icon btn-sm btn-ghost" data-adjust-balance="${a.id}" title="Adjust balance — set the real value and log the difference" aria-label="Adjust balance">⇄</button>
+        <button type="button" class="btn btn-icon btn-sm ${selected ? 'btn-primary' : 'btn-ghost'}" data-account-filter="${a.id}" aria-pressed="${selected}" title="${selected ? 'Filtering by this account' : "Show only this account's transactions"}" aria-label="Filter transactions">⧩</button>
         ${rowActions('accounts', a.id)}
       </div>
     </div>
-    <div class="panel-sub">${titleCase(a.type)}</div>
     ${isCredit ? `
       <div class="flex between" style="margin-top:12px;font-size:13px"><span class="text-muted">Owed</span><span class="cell-strong">${money(bal)}</span></div>
       ${limit > 0 ? `
