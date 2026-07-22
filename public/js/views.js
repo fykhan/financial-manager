@@ -5,7 +5,7 @@ import {
   toMonthly, FREQ_LABELS, assessSavingsRate, assessDTI, daysUntil,
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
   budgetStatus, netWorthHistory, currentNetWorth, debtBalance, debtsSummary, dueSoon,
-  isScheduled, scheduledTransactions, statement,
+  isScheduled, scheduledTransactions, statement, monthlySpendComparison, addMonths,
 } from './calc.js';
 import { donut, compareBars, progressBar, seriesColor, lineChart } from './charts.js';
 import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, titleCase, getCurrency, todayISO } from './format.js';
@@ -45,12 +45,25 @@ function rowActions(collection, id) {
   </div>`;
 }
 
-function statTile({ label, value, sub, subClass = '', dot }) {
+function statTile({ label, value, sub, subClass = '', sub2, sub2Class = '', dot }) {
   return `<div class="stat">
     <div class="stat-label">${dot ? `<span class="dot" style="background:${dot}"></span>` : ''}${label}</div>
     <div class="stat-value tabular">${value}</div>
     ${sub ? `<div class="stat-sub ${subClass}">${sub}</div>` : ''}
+    ${sub2 ? `<div class="stat-sub ${sub2Class}">${sub2}</div>` : ''}
   </div>`;
+}
+
+/** "↓ 8% vs Jun" delta line from monthlySpendComparison, or '' when there's
+ * no comparable previous month (don't invent a percentage). Spending less than
+ * last month is good (pos/green); more is neg. */
+function spendDeltaLine(data) {
+  const cmp = monthlySpendComparison(data);
+  if (cmp.deltaPct == null) return { sub2: '', sub2Class: '' };
+  const prevShort = monthLabel(addMonths(todayISO(), -1)).split(' ')[0];
+  const arrow = cmp.deltaPct < 0 ? '↓' : cmp.deltaPct > 0 ? '↑' : '→';
+  const sub2Class = cmp.deltaPct <= 0 ? 'pos' : 'neg';
+  return { sub2: `${arrow} ${pct(Math.abs(cmp.deltaPct), 0)} spent vs ${prevShort}`, sub2Class };
 }
 
 // ---------------- Spending-by-category chart (shared: dashboard + expenses) ----------------
@@ -96,9 +109,10 @@ export function renderDashboard(data) {
 
   const net = s.netCashFlow;
 
+  const spendDelta = spendDeltaLine(data);
   const tiles = `<div class="stat-grid">
     ${statTile({ label: 'Monthly income', value: money(s.monthlyIncome), sub: `${money(s.annualIncome, { cents: false })} / year` })}
-    ${statTile({ label: 'Monthly expenses', value: money(s.monthlyExpenses), sub: `incl. ${money(s.monthlyDebt)} debt` })}
+    ${statTile({ label: 'Monthly expenses', value: money(s.monthlyExpenses), sub: `incl. ${money(s.monthlyDebt)} debt`, ...spendDelta })}
     ${statTile({ label: 'Net cash flow', value: money(net), sub: net >= 0 ? 'Surplus each month' : 'Shortfall each month', subClass: net >= 0 ? 'pos' : 'neg' })}
     ${statTile({ label: 'Savings rate', value: pct(s.savingsRate, 0), sub: sr.label, dot: statusColor[sr.level] })}
   </div>`;
