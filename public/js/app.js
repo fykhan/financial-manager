@@ -34,8 +34,8 @@ function render() {
   document.getElementById('view-title').textContent = viewTitle(current);
   document.getElementById('view-container').innerHTML = RENDERERS[current](data);
 
-  // Sync nav highlight
-  document.querySelectorAll('.nav-item').forEach(btn => {
+  // Sync nav highlight (sidebar + bottom tab bar)
+  document.querySelectorAll('.nav-item, .bottom-nav-item[data-view]').forEach(btn => {
     btn.setAttribute('aria-current', btn.dataset.view === current ? 'true' : 'false');
   });
   // "+ Add" button only where a collection is active; "+ Log" is always shown.
@@ -186,10 +186,20 @@ function wire() {
     if (current !== 'dashboard') openForm(current);
   });
 
-  // Always-available quick-add for a transaction, from any view (topbar + mobile FAB).
+  // Always-available quick-add for a transaction, from any view (topbar + mobile FAB + bottom nav).
   const quickLog = () => openForm('transactions');
   document.getElementById('btn-log-txn').addEventListener('click', quickLog);
   document.getElementById('fab-log').addEventListener('click', quickLog);
+  document.getElementById('bnav-log').addEventListener('click', quickLog);
+
+  // Mobile bottom tab bar: view tabs navigate, "More" opens the sidebar sheet.
+  document.getElementById('bottom-nav').addEventListener('click', e => {
+    const viewBtn = e.target.closest('.bottom-nav-item[data-view]');
+    if (viewBtn) navigate(viewBtn.dataset.view);
+  });
+  document.getElementById('bnav-more').addEventListener('click', () => {
+    document.getElementById('sidebar').classList.toggle('open');
+  });
 
   document.getElementById('btn-theme').addEventListener('click', toggleTheme);
   document.getElementById('btn-data').addEventListener('click', openDataMenu);

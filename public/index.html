@@ -90,6 +90,25 @@
   <!-- Mobile quick-add FAB (superseded by the bottom nav's center + on small screens) -->
   <button class="fab" id="fab-log" aria-label="Log transaction" title="Log transaction">+</button>
 
+  <!-- Mobile bottom tab bar (shown < 900px; supersedes the FAB) -->
+  <nav class="bottom-nav" id="bottom-nav" aria-label="Primary">
+    <button class="bottom-nav-item" data-view="dashboard" aria-current="true">
+      <span class="bottom-nav-ico">◧</span><span class="bottom-nav-label">Home</span>
+    </button>
+    <button class="bottom-nav-item" data-view="transactions">
+      <span class="bottom-nav-ico">▤</span><span class="bottom-nav-label">Txns</span>
+    </button>
+    <button class="bottom-nav-item bottom-nav-log" id="bnav-log" aria-label="Log transaction">
+      <span class="bottom-nav-log-plus">+</span>
+    </button>
+    <button class="bottom-nav-item" data-view="statement">
+      <span class="bottom-nav-ico">▦</span><span class="bottom-nav-label">Report</span>
+    </button>
+    <button class="bottom-nav-item" id="bnav-more" aria-label="More">
+      <span class="bottom-nav-ico">☰</span><span class="bottom-nav-label">More</span>
+    </button>
+  </nav>
+
   <!-- Modal host -->
   <div class="modal-backdrop" id="modal-backdrop" hidden>
     <div class="modal" id="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
