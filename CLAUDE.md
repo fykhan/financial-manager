@@ -124,6 +124,16 @@ standalone display, dark theme color, SVG icons in `public/icons/` (a normal + a
 so there are no binary assets in the repo). There is deliberately **no service worker**: the app is
 online-only (the server is the sole source of truth), so there's nothing to cache for offline use.
 
+### User guide
+
+`public/guide.md` is a plain-markdown usage guide, rendered in-app as the `#guide` view. `views.js`
+fetches it once (`loadGuide()`), converts it with a tiny self-contained markdown subset parser
+(`mdToHtml` — headings/lists/blockquotes/hr + inline bold/italic/code/links, all HTML-escaped first),
+caches the HTML, and `renderGuide()` returns it; `app.js`'s `render()` triggers the lazy load and
+re-renders once ready. It's the only view that pulls an extra static asset. Edit the guide by editing
+the markdown — no code change needed. Non-collection views like `guide`/`statement` have no add form,
+so the topbar "+ Add" is gated on `forms.hasForm(current)`.
+
 ### Conventions worth knowing
 
 - Money amounts are stored in their native frequency (e.g. `frequency: 'monthly'|'weekly'|...`) and

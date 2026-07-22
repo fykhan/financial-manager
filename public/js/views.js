@@ -13,7 +13,7 @@ import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, title
 const VIEW_TITLES = {
   dashboard: 'Dashboard', transactions: 'Transactions', income: 'Income', expenses: 'Expenses',
   installments: 'Installments', subscriptions: 'Subscriptions', savings: 'Savings',
-  accounts: 'Accounts', debts: 'Debts', statement: 'Statement',
+  accounts: 'Accounts', debts: 'Debts', statement: 'Statement', guide: 'User guide',
 };
 export function viewTitle(v) { return VIEW_TITLES[v] || 'GradPlan'; }
 
@@ -1596,4 +1596,65 @@ function statementLedger(st, data) {
       </tbody>
     </table></div>
   </div>`;
+}
+
+// ---------------- Usage guide ----------------
+// The guide lives as a static markdown file (public/guide.md) so it's easy to
+// edit; we fetch it once and render a small, safe subset of markdown to HTML.
+let guideHtml = null;
+
+export function guideLoaded() { return guideHtml != null; }
+
+export async function loadGuide() {
+  if (guideHtml != null) return;
+  try {
+    const res = await fetch('/guide.md', { credentials: 'same-origin' });
+    guideHtml = res.ok ? mdToHtml(await res.text()) : '<p class="text-muted">Could not load the guide.</p>';
+  } catch {
+    guideHtml = '<p class="text-muted">Could not load the guide.</p>';
+  }
+}
+
+export function renderGuide() {
+  return `<div class="card" style="padding:26px 30px"><div class="guide">${
+    guideHtml ?? '<p class="text-muted">Loading guide…</p>'
+  }</div></div>`;
+}
+
+/** Minimal, self-authored-markdown → HTML. Supports headings, ordered/unordered
+ * lists (with soft-wrapped continuation lines), blockquotes, horizontal rules,
+ * paragraphs, and inline bold / italic / code / links. Everything is
+ * HTML-escaped first, so it's safe for display. */
+function mdToHtml(md) {
+  const esc = s => s.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
+  const inline = s => esc(s)
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+?)`/g, '<code>$1</code>')
+    .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>')
+    .replace(/(^|[^*])\*(?!\s)([^*]+?)\*(?!\*)/g, '$1<em>$2</em>');
+
+  const lines = md.replace(/\r\n/g, '\n').split('\n');
+  let html = '', list = null, item = null, para = [], quote = [];
+  const flushPara = () => { if (para.length) { html += `<p>${inline(para.join(' '))}</p>`; para = []; } };
+  const flushQuote = () => { if (quote.length) { html += `<blockquote>${inline(quote.join(' '))}</blockquote>`; quote = []; } };
+  const flushItem = () => { if (item != null) { html += `<li>${inline(item)}</li>`; item = null; } };
+  const closeList = () => { flushItem(); if (list) { html += `</${list}>`; list = null; } };
+  const flushAll = () => { flushPara(); flushQuote(); closeList(); };
+  const openList = kind => { flushPara(); flushQuote(); flushItem(); if (list !== kind) { closeList(); list = kind; html += `<${kind}>`; } };
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    let m;
+    if (!line.trim()) { flushAll(); continue; }
+    // An indented, non-marker line continues the current list item.
+    if (item != null && /^\s{2,}\S/.test(raw) && !/^\s*([-*]|\d+\.)\s/.test(line)) { item += ' ' + line.trim(); continue; }
+    if (m = line.match(/^(#{1,4})\s+(.*)$/)) { flushAll(); const l = m[1].length; html += `<h${l}>${inline(m[2])}</h${l}>`; }
+    else if (/^---+$/.test(line)) { flushAll(); html += '<hr>'; }
+    else if (m = line.match(/^>\s?(.*)$/)) { flushPara(); closeList(); quote.push(m[1]); }
+    else if (m = line.match(/^\s*[-*]\s+(.*)$/)) { openList('ul'); item = m[1]; }
+    else if (m = line.match(/^\s*(\d+)\.\s+(.*)$/)) { openList('ol'); item = m[2]; }
+    else { flushQuote(); closeList(); para.push(line.trim()); }
+  }
+  flushAll();
+  return html;
 }

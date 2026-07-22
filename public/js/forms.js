@@ -180,6 +180,10 @@ const SCHEMAS = {
 
 export function labelOf(collection) { return SCHEMAS[collection].title; }
 
+/** Whether a view has an add/edit form (i.e. it's a real collection, not a
+ * report/guide view). Used to decide whether to show the "+ Add" button. */
+export function hasForm(collection) { return collection in SCHEMAS; }
+
 function resolveOptions(f) {
   const opts = typeof f.options === 'function' ? f.options() : f.options;
   return opts.map(o => (typeof o === 'object' ? o : { value: o, label: FREQ_LABELS[o] || titleCase(o) }));

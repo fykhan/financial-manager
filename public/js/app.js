@@ -3,7 +3,7 @@
 import * as store from './store.js';
 import { setCurrency, CURRENCIES, todayISO } from './format.js';
 import { initModalChrome, openModal, closeModal, toast, confirmDialog, download } from './ui.js';
-import { openForm } from './forms.js';
+import { openForm, hasForm } from './forms.js';
 import { dueSoon, nextOccurrence } from './calc.js';
 import {
   viewTitle, renderDashboard, renderTransactions, renderIncome, renderExpenses,
@@ -12,6 +12,7 @@ import {
   setAccountFilter, clearAccountFilter, setTxnFilter, clearTxnFilter, renderDrillDown, drillDownTitle,
   toggleSelect, selectAll, clearSelection, clearAllSelections, getSelectedIds,
   setPage, resetPage, resetAllPages, LIST_FRAGMENTS, setSpendMode,
+  renderGuide, loadGuide, guideLoaded,
 } from './views.js';
 
 const RENDERERS = {
@@ -25,6 +26,7 @@ const RENDERERS = {
   accounts: renderAccounts,
   debts: renderDebts,
   statement: renderStatement,
+  guide: renderGuide,
 };
 
 let current = 'dashboard';
@@ -39,11 +41,16 @@ function render() {
   document.querySelectorAll('.nav-item, .bottom-nav-item[data-view]').forEach(btn => {
     btn.setAttribute('aria-current', btn.dataset.view === current ? 'true' : 'false');
   });
-  // "+ Add" button only where a collection is active; "+ Log" is always shown.
-  document.getElementById('btn-add-primary').style.display = current === 'dashboard' ? 'none' : '';
+  // "+ Add" only on views that have an add form (not dashboard/statement/guide).
+  document.getElementById('btn-add-primary').style.display = hasForm(current) ? '' : 'none';
 
   // Due-soon count badge on the Dashboard nav items (sidebar + bottom nav).
   updateDueBadges(dueSoon(data, 3).length);
+
+  // The guide loads its markdown lazily, then re-renders once it's ready.
+  if (current === 'guide' && !guideLoaded()) {
+    loadGuide().then(() => { if (current === 'guide') render(); });
+  }
 }
 
 // A collection can surface in more than one list fragment on a page (a
@@ -231,7 +238,7 @@ function wire() {
   });
 
   document.getElementById('btn-add-primary').addEventListener('click', () => {
-    if (current !== 'dashboard') openForm(current);
+    if (hasForm(current)) openForm(current);
   });
 
   // Always-available quick-add for a transaction, from any view (topbar + mobile FAB + bottom nav).

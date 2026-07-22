@@ -87,6 +87,14 @@ Tracking execution of `.claude/improvement-plan.md`. One commit per phase item, 
 Every item in `improvement-plan.md` (Phases 1–8) is implemented and committed on `main`.
 `node --test` green (56). No manual browser smoke test was possible this session (needs DB/login).
 
+## Post-plan additions
+
+- **User guide** — `public/guide.md` rendered in-app as the `#guide` view (sidebar "Help → User
+  guide"). `views.js` `loadGuide`/`renderGuide` + a small `mdToHtml` markdown-subset parser (lazy
+  fetch + cache, re-render when ready). Added `forms.hasForm(collection)` and gated the topbar
+  "+ Add" on it — also fixes a latent crash where the Statement view showed a "+ Add" that called
+  `openForm('statement')` (no schema).
+
 ## Groundwork already in tree from before this session (uncommitted-then-committed under 240bf6c)
 
 `calc.js`: `addDays`, `nextOccurrence`, `monthlySpendComparison`, `dueSoon` extra fields + tests.
