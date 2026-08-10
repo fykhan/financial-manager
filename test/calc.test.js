@@ -84,6 +84,24 @@ test('installmentStatus marks a finished loan inactive', () => {
   approx(st.remainingBalance, 0);
 });
 
+test('installmentStatus counts payments from nextDueDate when auto-pay tracks it', () => {
+  const it = {
+    principal: 1200, monthlyPayment: 100, termMonths: 12, startDate: '2026-01-15', apr: 0,
+    accountId: 'acc_1', nextDueDate: '2026-08-15', // 7 payments posted
+  };
+  // Same reference date as the straight-line test above, which reports 6 —
+  // the posted ledger, not the calendar, is what moves the number.
+  const st = installmentStatus(it, '2026-07-15');
+  assert.equal(st.monthsPaid, 7);
+  assert.equal(st.monthsRemaining, 5);
+  approx(st.remainingBalance, 500);
+});
+
+test('installmentStatus falls back to elapsed time without a nextDueDate', () => {
+  const it = { principal: 1200, monthlyPayment: 100, termMonths: 12, startDate: '2026-01-15', apr: 0 };
+  assert.equal(installmentStatus(it, '2026-07-15').monthsPaid, 6);
+});
+
 test('savingStatus projects months and tracks deadline feasibility', () => {
   const g = { target: 10000, saved: 2400, monthlyContribution: 400, deadline: '' };
   const st = savingStatus(g, '2026-07-15');

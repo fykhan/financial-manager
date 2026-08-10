@@ -102,6 +102,19 @@ export function nextOccurrence(dateISO, frequency) {
 }
 
 /**
+ * How many payments have actually been made.
+ *
+ * nextDueDate is the authoritative "next payment owed" pointer — the auto-pay
+ * catch-up and the "mark paid" action each advance it one month per posted
+ * transaction — so the gap from startDate to it is the real payment count.
+ * Without it (no auto-pay link) we fall back to elapsed calendar time.
+ */
+function paymentsMade(it, refISO) {
+  if (it.startDate && it.nextDueDate) return monthsBetween(it.startDate, it.nextDueDate);
+  return monthsBetween(it.startDate, refISO);
+}
+
+/**
  * Full picture of an installment / loan.
  * Inputs: principal (original amount), monthlyPayment, termMonths, startDate, apr (annual %, optional).
  * If apr is provided we compute a proper amortization; otherwise a straight-line estimate.
@@ -110,7 +123,7 @@ export function installmentStatus(it, refISO) {
   const principal = Number(it.principal) || 0;
   const term = clampMonths(it.termMonths);
   const apr = Number(it.apr) || 0;
-  const monthsPaid = Math.min(term, monthsBetween(it.startDate, refISO));
+  const monthsPaid = Math.min(term, paymentsMade(it, refISO));
   const monthsRemaining = Math.max(0, term - monthsPaid);
 
   // Monthly payment: use provided, else derive from amortization (or straight-line).
@@ -670,6 +683,7 @@ export function dueSoon(data, days = 14, refISO) {
         kind: 'subscription', id: s.id, name: s.name, amount: Number(s.amount) || 0,
         date: s.nextRenewal, days: d, accountId: s.accountId || null,
         dateField: 'nextRenewal', frequency: s.cycle,
+        category: s.category || 'Subscriptions',
       });
     }
   });
@@ -695,6 +709,7 @@ export function dueSoon(data, days = 14, refISO) {
         kind: 'installment', id: it.id, name: it.name, amount: st.monthlyPayment,
         date: it.nextDueDate, days: d, accountId: it.accountId || null,
         dateField: 'nextDueDate', frequency: 'monthly',
+        category: 'Debt & loans',
       });
     }
   });

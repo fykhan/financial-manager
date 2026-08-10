@@ -318,7 +318,13 @@ function wire() {
       if (!item) return;
       const collection = { subscription: 'subscriptions', expense: 'expenses', installment: 'installments' }[kind];
       return openForm('transactions', null, {
-        prefill: { type: 'expense', amount: item.amount, description: item.name, date: todayISO(), category: item.category || '' },
+        prefill: {
+          type: 'expense',
+          amount: item.amount,
+          description: item.name,
+          date: todayISO(),
+          category: item.category || (item.kind === 'installment' ? 'Debt & loans' : 'Other'),
+        },
         // On save, roll the source record's next-due date forward one cycle.
         onSaved: async () => {
           if (!store.getById(collection, id)) return;
