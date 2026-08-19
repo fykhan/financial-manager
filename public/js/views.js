@@ -5,7 +5,8 @@ import {
   toMonthly, FREQ_LABELS, assessSavingsRate, assessDTI, daysUntil,
   accountBalance, accountsSummary, paymentsDueThisMonth, incomeDueThisMonth,
   budgetStatus, netWorthHistory, currentNetWorth, debtBalance, debtsSummary, dueSoon,
-  isScheduled, scheduledTransactions, statement, monthlySpendComparison, addMonths,
+  isScheduled, scheduledTransactions, statement, transactionsInRange, monthlySpendComparison, addMonths,
+  parseKeywords, matchesKeywords,
 } from './calc.js';
 import { donut, compareBars, progressBar, seriesColor, lineChart } from './charts.js';
 import { money, moneyCompact, pct, num, dateLabel, monthLabel, escapeHtml, titleCase, getCurrency, todayISO } from './format.js';
@@ -784,6 +785,49 @@ function bulkToolbar(collection, ids) {
   </div>`;
 }
 
+// ---------------- Keyword search (shared by Transactions + Statement) ----------------
+// One component, two views: a search input plus a chip per parsed keyword, so
+// it's visible how the query was split and any single term can be dropped.
+// `scope` ('txn' | 'statement') is carried in the data attribute so app.js
+// knows which view's filter to patch — the state itself stays in this module.
+
+const KEYWORD_HINT = 'Keywords all have to match · "quote a phrase" · -exclude a word';
+
+/** Just the chip row — its own export so a live search can patch it in place
+ * without a full re-render (see app.js). */
+export function keywordChips(scope) {
+  const value = scope === 'statement' ? statementFilter.text : txnFilter.text;
+  const terms = parseKeywords(value);
+  // Chips would just echo the input for a single plain word — only worth
+  // showing once the query actually splits into something.
+  if (terms.length < 2 && !terms.some(k => k.negate || k.phrase)) return '';
+  return `<div class="flex wrap gap-8" style="margin-top:8px">
+    ${terms.map((k, i) => `<span class="badge cat">${k.negate ? '−' : ''}${escapeHtml(k.phrase ? `"${k.term}"` : k.term)}
+      <button type="button" class="icon-btn-sm" data-kw-drop="${scope}:${i}" title="Remove keyword" aria-label="Remove keyword ${escapeHtml(k.term)}" style="margin-left:4px">✕</button>
+    </span>`).join('')}
+  </div>`;
+}
+
+function keywordSearch(scope, value, placeholder) {
+  return `<div style="flex:1;min-width:190px">
+    <input type="search" class="input input-sm" data-kw-search="${scope}" placeholder="${escapeHtml(placeholder)}"
+      value="${escapeHtml(value)}" title="${KEYWORD_HINT}" aria-label="Search transactions by keyword" style="width:100%">
+    <div id="kw-chips-${scope}">${keywordChips(scope)}</div>
+  </div>`;
+}
+
+/** Rebuild a query string from parsed keywords, preserving quotes and negation. */
+function keywordsToQuery(terms) {
+  return terms.map(k => `${k.negate ? '-' : ''}${k.phrase ? `"${k.term}"` : k.term}`).join(' ');
+}
+
+/** Drop the nth keyword from a view's search query (chip ✕). */
+export function dropKeyword(scope, index) {
+  const current = scope === 'statement' ? statementFilter.text : txnFilter.text;
+  const next = keywordsToQuery(parseKeywords(current).filter((_, i) => i !== index));
+  if (scope === 'statement') setStatementFilter({ text: next }); else setTxnFilter({ text: next });
+}
+
 // ---------------- Accounts ----------------
 let accountFilter = null;
 /** Select (or toggle off, if already selected) an account to filter the ledger by. */
@@ -796,17 +840,12 @@ let txnFilter = { text: '', category: '', accountId: '' };
 export function setTxnFilter(patch) { txnFilter = { ...txnFilter, ...patch }; }
 export function clearTxnFilter() { txnFilter = { text: '', category: '', accountId: '' }; }
 
-/** Apply the Transactions-view filters (text / category / account) to a list. */
+/** Apply the Transactions-view filters (keywords / category / account) to a list. */
 function applyTxnFilter(transactions) {
-  const q = txnFilter.text.trim().toLowerCase();
   return transactions.filter(t => {
     if (txnFilter.category && (t.category || 'Other') !== txnFilter.category) return false;
     if (txnFilter.accountId && t.accountId !== txnFilter.accountId && t.toAccountId !== txnFilter.accountId) return false;
-    if (q) {
-      const hay = `${t.description || ''} ${t.category || ''} ${t.notes || ''} ${t.amount ?? ''}`.toLowerCase();
-      if (!hay.includes(q)) return false;
-    }
-    return true;
+    return matchesKeywords(t, txnFilter.text);
   });
 }
 
@@ -968,8 +1007,7 @@ function txnFilterControls(data) {
 
   return `<div class="section" style="margin-bottom:8px">
     <div class="flex wrap gap-12 center">
-      <input type="search" class="input input-sm" data-txn-search placeholder="Search description, category, notes…"
-        value="${escapeHtml(txnFilter.text)}" style="flex:1;min-width:180px" aria-label="Search transactions">
+      ${keywordSearch('txn', txnFilter.text, 'Search keywords — description, category, notes…')}
       <select class="input input-sm" data-txn-account aria-label="Filter by account" style="min-width:150px">${accountOptions}</select>
     </div>
     ${catChips}
@@ -1230,6 +1268,66 @@ export function stepStatementMonth(delta) {
   statementPeriod = { preset: 'custom', from: isoLocal(y, m, 1), to: isoLocal(y, m + 1, 0) };
 }
 
+// Statement content filters, module-local like the period above. Cleared on
+// navigate() so leaving and returning to the view starts clean.
+let statementFilter = { accountId: '', type: '', category: '', text: '' };
+export function setStatementFilter(patch) { statementFilter = { ...statementFilter, ...patch }; }
+export function clearStatementFilter() { statementFilter = { accountId: '', type: '', category: '', text: '' }; }
+function activeStatementFilter() {
+  const f = statementFilter;
+  return !!(f.accountId || f.type || f.category || f.text.trim());
+}
+
+const STATEMENT_TYPES = ['income', 'expense', 'transfer', 'savings', 'debt'];
+
+/** Plain-text description of the active filters, for the printed statement. */
+function statementFilterSummary(data) {
+  const f = statementFilter;
+  const parts = [];
+  if (f.accountId) parts.push(`Account: ${(data.accounts || []).find(a => a.id === f.accountId)?.name || '—'}`);
+  if (f.type) parts.push(`Type: ${titleCase(f.type)}`);
+  if (f.category) parts.push(`Category: ${f.category}`);
+  if (f.text.trim()) parts.push(`Search: "${f.text.trim()}"`);
+  return parts.join(' · ');
+}
+
+/** Account / type / category / search controls for the statement contents. */
+function statementFilterControls(data, st) {
+  const f = statementFilter;
+  const accounts = data.accounts || [];
+
+  // Categories present in the period — computed off the *unfiltered* window so
+  // picking one doesn't collapse the list to just that option.
+  const period = currentPeriod();
+  const cats = [...new Set(transactionsInRange(data.transactions || [], period.from, period.to)
+    .map(t => t.category || 'Other'))].sort();
+
+  const opt = (value, label, selected) =>
+    `<option value="${escapeHtml(value)}" ${selected ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+
+  const accountOptions = [opt('', 'All accounts', !f.accountId)]
+    .concat(accounts.map(a => opt(a.id, a.name, f.accountId === a.id))).join('');
+  const typeOptions = [opt('', 'All types', !f.type)]
+    .concat(STATEMENT_TYPES.map(t => opt(t, titleCase(t), f.type === t))).join('');
+  const catOptions = [opt('', 'All categories', !f.category)]
+    .concat(cats.map(c => opt(c, c, f.category === c))).join('');
+
+  return `<div class="panel no-print" style="margin-bottom:20px">
+    <div class="flex wrap gap-12 center">
+      <select class="input input-sm" data-statement-filter="accountId" aria-label="Filter by account" style="min-width:150px">${accountOptions}</select>
+      <select class="input input-sm" data-statement-filter="type" aria-label="Filter by type" style="min-width:130px">${typeOptions}</select>
+      <select class="input input-sm" data-statement-filter="category" aria-label="Filter by category" style="min-width:150px">${catOptions}</select>
+      ${keywordSearch('statement', f.text, 'Search keywords — description, notes…')}
+      ${activeStatementFilter() ? '<button type="button" class="btn btn-sm btn-ghost" data-statement-filter-clear>Clear filters</button>' : ''}
+    </div>
+    ${activeStatementFilter() ? `<div class="text-muted" style="font-size:12px;margin-top:8px">
+      Showing ${num(st.count)} of ${num(st.totalCount)} transaction${st.totalCount === 1 ? '' : 's'} in this period${
+        f.accountId ? ' · balances are for the selected account only' : ''}${
+        st.reconciles ? '' : ' · running balance hidden while rows are filtered'}
+    </div>` : ''}
+  </div>`;
+}
+
 function periodLabel(period) {
   if (period.preset && period.preset !== 'custom') {
     return STATEMENT_PRESETS.find(([k]) => k === period.preset)?.[1] || 'Custom period';
@@ -1281,10 +1379,12 @@ export function renderStatement(data) {
     return `${header}<div class="card">${empty('▦', 'Nothing to report yet', 'Add accounts and log some transactions, then come back to generate a statement for any period.', 'accounts')}</div>`;
   }
 
-  const st = statement(data, period.from, period.to);
+  const st = statement(data, period.from, period.to, statementFilter);
+  const scopeName = statementFilter.accountId
+    ? (data.accounts || []).find(a => a.id === statementFilter.accountId)?.name : '';
   const printedRange = `<div class="statement-range flex between center" style="margin-bottom:20px;flex-wrap:wrap;gap:12px">
     <div>
-      <h2 style="margin:0 0 2px">Statement — ${escapeHtml(periodLabel(period))}</h2>
+      <h2 style="margin:0 0 2px">Statement${scopeName ? ` · ${escapeHtml(scopeName)}` : ''} — ${escapeHtml(periodLabel(period))}</h2>
       <div class="text-muted" style="font-size:13px">${st.from ? dateLabel(st.from) : 'Beginning'} to ${st.to ? dateLabel(st.to) : 'today'} · ${num(st.count)} transaction${st.count === 1 ? '' : 's'}</div>
     </div>
     <div class="flex gap-8 no-print">
@@ -1301,7 +1401,7 @@ export function renderStatement(data) {
     ${statTile({ label: 'Net change', value: money(st.net), sub: st.net >= 0 ? 'Surplus' : 'Shortfall', subClass: st.net >= 0 ? 'pos' : 'neg' })}
   </div>`;
 
-  return `${header}${printedRange}${tiles}
+  return `${header}${statementFilterControls(data, st)}${printedRange}${tiles}
     ${statementCategoryPanel(st)}
     ${statementAccountsPanel(st)}
     ${statementSavingsDebtPanel(st)}
@@ -1329,19 +1429,21 @@ function statementTargetText(t, data) {
  */
 export function statementCSV(data) {
   const period = currentPeriod();
-  const st = statement(data, period.from, period.to);
+  const st = statement(data, period.from, period.to, statementFilter);
   const r2 = n => (n ? Math.round(n * 100) / 100 : '');
 
   const rows = [['Date', 'Description', 'Type', 'Category', 'Account', 'Money In', 'Money Out', 'Balance', 'Scheduled', 'Notes']];
-  rows.push([st.from || '', 'Opening balance', '', '', '', '', '', Math.round(st.openingBalance * 100) / 100, '', '']);
+  // A filtered export has no running balance to reconcile, so it skips the
+  // opening/closing balance rows and just totals what's included.
+  if (st.reconciles) rows.push([st.from || '', 'Opening balance', '', '', '', '', '', Math.round(st.openingBalance * 100) / 100, '', '']);
   st.register.forEach(r => rows.push([
     r.date || '', r.description || '', r.type || '', r.category || '', statementTargetText(r, data),
-    r2(r.moneyIn), r2(r.moneyOut), Math.round(r.balance * 100) / 100,
+    r2(r.moneyIn), r2(r.moneyOut), r.balance == null ? '' : Math.round(r.balance * 100) / 100,
     isScheduled(r) ? 'yes' : '', r.notes || '',
   ]));
-  rows.push([st.to || '', 'Closing balance', '', '', '',
+  rows.push([st.to || '', st.reconciles ? 'Closing balance' : 'Totals (filtered)', '', '', '',
     Math.round(st.totalIncome * 100) / 100, Math.round(st.totalExpense * 100) / 100,
-    Math.round(st.closingBalance * 100) / 100, '', '']);
+    st.reconciles ? Math.round(st.closingBalance * 100) / 100 : '', '', '']);
 
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   return rows.map(r => r.map(q).join(',')).join('\r\n');
@@ -1350,7 +1452,7 @@ export function statementCSV(data) {
 /** A filename-safe token for the current statement period, e.g. "2026-07-01_to_2026-07-31". */
 export function statementFilename() {
   const p = currentPeriod();
-  return `${p.from || 'start'}_to_${p.to || 'today'}`;
+  return `${p.from || 'start'}_to_${p.to || 'today'}${activeStatementFilter() ? '_filtered' : ''}`;
 }
 
 /**
@@ -1362,10 +1464,13 @@ export function statementFilename() {
  */
 export function statementDocument(data) {
   const period = currentPeriod();
-  const st = statement(data, period.from, period.to);
+  const st = statement(data, period.from, period.to, statementFilter);
   const holder = (data.settings && data.settings.name) || 'Account holder';
   const cur = getCurrency();
   const cell = v => (v ? money(v) : '—');
+  // A filtered statement can't carry a running balance (see calc.statement).
+  const bal = st.reconciles;
+  const filterNote = statementFilterSummary(data);
 
   const accountRows = st.accountMovements.map(a => `<tr>
     <td>${escapeHtml(a.name)}</td><td>${titleCase(a.type)}</td>
@@ -1386,7 +1491,7 @@ export function statementDocument(data) {
     <td>${escapeHtml(statementTargetText(r, data))}</td>
     <td class="n pos">${cell(r.moneyIn)}</td>
     <td class="n neg">${cell(r.moneyOut)}</td>
-    <td class="n">${money(r.balance)}</td>
+    ${bal ? `<td class="n">${money(r.balance)}</td>` : ''}
   </tr>`).join('');
 
   const savingsBlock = (st.savings.contributed || st.savings.withdrawn) ? `<tr>
@@ -1445,6 +1550,7 @@ export function statementDocument(data) {
   <div class="holder">
     <div class="label">Statement for</div>
     <div>${escapeHtml(holder)}</div>
+    ${filterNote ? `<div class="label" style="margin-top:8px">Filtered by</div><div>${escapeHtml(filterNote)}</div>` : ''}
   </div>
 
   <div class="summary">
@@ -1467,12 +1573,12 @@ export function statementDocument(data) {
 
   <h2>Transaction register</h2>
   ${st.register.length ? `<table>
-    <thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Account</th><th class="n">Money in</th><th class="n">Money out</th><th class="n">Balance</th></tr></thead>
+    <thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Account</th><th class="n">Money in</th><th class="n">Money out</th>${bal ? '<th class="n">Balance</th>' : ''}</tr></thead>
     <tbody>
-      <tr class="boundary"><td class="nowrap">${st.from ? dateLabel(st.from) : '—'}</td><td colspan="3">Opening balance</td><td class="n">—</td><td class="n">—</td><td class="n">${money(st.openingBalance)}</td></tr>
+      ${bal ? `<tr class="boundary"><td class="nowrap">${st.from ? dateLabel(st.from) : '—'}</td><td colspan="3">Opening balance</td><td class="n">—</td><td class="n">—</td><td class="n">${money(st.openingBalance)}</td></tr>` : ''}
       ${registerRows}
-      <tr class="boundary"><td class="nowrap">${st.to ? dateLabel(st.to) : '—'}</td><td colspan="3">Closing balance</td><td class="n pos">${money(st.totalIncome)}</td><td class="n neg">${money(st.totalExpense)}</td><td class="n">${money(st.closingBalance)}</td></tr>
-    </tbody></table>` : `<p style="color:#888">No transactions in this period. Opening and closing balance: ${money(st.openingBalance)}.</p>`}
+      <tr class="boundary"><td class="nowrap">${st.to ? dateLabel(st.to) : '—'}</td><td colspan="3">${bal ? 'Closing balance' : 'Totals (filtered)'}</td><td class="n pos">${money(st.totalIncome)}</td><td class="n neg">${money(st.totalExpense)}</td>${bal ? `<td class="n">${money(st.closingBalance)}</td>` : ''}</tr>
+    </tbody></table>` : `<p style="color:#888">No transactions match this statement. Opening and closing balance: ${money(st.openingBalance)}.</p>`}
 
   <footer>Generated by GradPlan on ${dateLabel(todayISO())} · For personal reference only</footer>
 </div></body></html>`;
@@ -1559,24 +1665,28 @@ function statementSavingsDebtPanel(st) {
  */
 function statementLedger(st, data) {
   if (!st.register.length) {
+    const msg = st.totalCount
+      ? 'No transactions match the current filters.'
+      : `No transactions in this period. Opening and closing balance: ${money(st.openingBalance)}.`;
     return `<div class="section">
       <div class="section-head"><h2>Transaction register</h2></div>
-      <div class="text-muted" style="padding:12px 0">No transactions in this period. Opening and closing balance: ${money(st.openingBalance)}.</div>
+      <div class="text-muted" style="padding:12px 0">${msg}</div>
     </div>`;
   }
   const inOut = v => v ? money(v) : '<span class="cell-muted">—</span>';
+  const bal = st.reconciles; // a filtered register can't carry a running balance
   return `<div class="section">
     <div class="section-head"><h2>Transaction register</h2></div>
     <div class="table-wrap"><table class="data">
-      <thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Category</th><th>Account</th><th class="num">Money in</th><th class="num">Money out</th><th class="num">Balance</th></tr></thead>
+      <thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Category</th><th>Account</th><th class="num">Money in</th><th class="num">Money out</th>${bal ? '<th class="num">Balance</th>' : ''}</tr></thead>
       <tbody>
-        <tr class="statement-boundary">
+        ${bal ? `<tr class="statement-boundary">
           <td class="cell-muted" data-label="Date">${st.from ? dateLabel(st.from) : '—'}</td>
           <td class="cell-strong" data-label="Description" colspan="4">Opening balance</td>
           <td class="num cell-muted" data-label="Money in">—</td>
           <td class="num cell-muted" data-label="Money out">—</td>
           <td class="num cell-strong" data-label="Balance">${money(st.openingBalance)}</td>
-        </tr>
+        </tr>` : ''}
         ${st.register.map(r => `<tr>
           <td class="cell-muted" data-label="Date">${dateLabel(r.date)} ${scheduledBadge(r)}</td>
           <td class="cell-strong" data-label="Description">${escapeHtml(r.description)}${r.notes ? `<div class="cell-muted">${escapeHtml(r.notes)}</div>` : ''}</td>
@@ -1585,16 +1695,16 @@ function statementLedger(st, data) {
           <td data-label="Account">${statementTarget(r, data)}</td>
           <td class="num text-good" data-label="Money in">${inOut(r.moneyIn)}</td>
           <td class="num text-crit" data-label="Money out">${inOut(r.moneyOut)}</td>
-          <td class="num tabular" data-label="Balance">${money(r.balance)}</td>
+          ${bal ? `<td class="num tabular" data-label="Balance">${money(r.balance)}</td>` : ''}
         </tr>`).join('')}
         <tr class="statement-boundary">
           <td class="cell-muted" data-label="Date">${st.to ? dateLabel(st.to) : '—'}</td>
-          <td class="cell-strong" data-label="Description" colspan="2">Closing balance</td>
+          <td class="cell-strong" data-label="Description" colspan="2">${bal ? 'Closing balance' : 'Totals (filtered)'}</td>
           <td data-label="Category"></td>
           <td data-label="Account"></td>
           <td class="num text-good cell-strong" data-label="Money in">${money(st.totalIncome)}</td>
           <td class="num text-crit cell-strong" data-label="Money out">${money(st.totalExpense)}</td>
-          <td class="num cell-strong" data-label="Balance">${money(st.closingBalance)}</td>
+          ${bal ? `<td class="num cell-strong" data-label="Balance">${money(st.closingBalance)}</td>` : ''}
         </tr>
       </tbody>
     </table></div>

@@ -9,6 +9,7 @@ import {
   assessBudget, budgetStatus, accountBalanceHistory, netWorthHistory, currentNetWorth,
   debtBalance, debtsSummary, savingBalance, dueSoon, isScheduled, scheduledTransactions,
   transactionsInRange, accountBalanceAsOf, statement, nextOccurrence, monthlySpendComparison,
+  parseKeywords, matchesKeywords,
 } from '../public/js/calc.js';
 
 const approx = (a, b, eps = 0.01) => assert.ok(Math.abs(a - b) <= eps, `${a} ≈ ${b}`);
@@ -713,6 +714,103 @@ test('statement register reconciles with a credit account and a transfer', () =>
   approx(charge.moneyOut, 120);
   approx(st.closingBalance, 500 + 1000 - 120);
   approx(st.register[st.register.length - 1].balance, st.closingBalance);
+});
+
+test('parseKeywords splits on whitespace, keeps quoted phrases, marks exclusions', () => {
+  assert.deepEqual(parseKeywords('coffee'), [{ term: 'coffee', negate: false, phrase: false }]);
+  assert.deepEqual(parseKeywords('  Coffee   JULY '), [
+    { term: 'coffee', negate: false, phrase: false },
+    { term: 'july', negate: false, phrase: false },
+  ]);
+  assert.deepEqual(parseKeywords('"whole foods" -refund'), [
+    { term: 'whole foods', negate: false, phrase: true },
+    { term: 'refund', negate: true, phrase: false },
+  ]);
+  assert.deepEqual(parseKeywords('-"pending charge"'), [{ term: 'pending charge', negate: true, phrase: true }]);
+  // Nothing to search for
+  assert.deepEqual(parseKeywords(''), []);
+  assert.deepEqual(parseKeywords('   '), []);
+  assert.deepEqual(parseKeywords('""'), []);
+  assert.deepEqual(parseKeywords(undefined), []);
+});
+
+test('matchesKeywords ANDs every keyword and honours exclusions', () => {
+  const t = { description: 'Morning coffee', category: 'Food', notes: 'Whole Foods run', type: 'expense', amount: 4.5 };
+
+  assert.equal(matchesKeywords(t, ''), true); // empty query matches everything
+  assert.equal(matchesKeywords(t, 'coffee'), true);
+  assert.equal(matchesKeywords(t, 'COFFEE'), true); // case-insensitive
+  assert.equal(matchesKeywords(t, 'coffee food'), true); // both present -> match
+  assert.equal(matchesKeywords(t, 'coffee taxi'), false); // one missing -> no match
+  assert.equal(matchesKeywords(t, '"whole foods"'), true); // phrase present in notes
+  assert.equal(matchesKeywords(t, '"foods whole"'), false); // phrase order matters
+  assert.equal(matchesKeywords(t, 'coffee -refund'), true);
+  assert.equal(matchesKeywords(t, 'coffee -whole'), false); // excluded word is present
+  // Searches type and amount too, not just the text fields
+  assert.equal(matchesKeywords(t, 'expense'), true);
+  assert.equal(matchesKeywords(t, '4.5'), true);
+});
+
+test('statement filtered by account re-scopes balances to that account', () => {
+  const data = {
+    accounts: [
+      { id: 'cash', type: 'checking', balance: 500 },
+      { id: 'wallet', type: 'cash', balance: 100 },
+    ],
+    transactions: [
+      { id: 'a', type: 'income', accountId: 'cash', amount: 1000, date: '2026-07-02' },
+      { id: 'b', type: 'expense', accountId: 'wallet', amount: 40, category: 'Food', date: '2026-07-03' },
+      { id: 'c', type: 'transfer', accountId: 'cash', toAccountId: 'wallet', amount: 200, date: '2026-07-04' },
+    ],
+  };
+  const st = statement(data, '2026-07-01', '2026-07-31', { accountId: 'wallet' });
+
+  // Only the rows touching the wallet (either side of the transfer)
+  assert.deepEqual(st.register.map(r => r.id), ['b', 'c']);
+  assert.equal(st.count, 2);
+  assert.equal(st.totalCount, 3);
+  // Balances are the wallet's alone, and the register still reconciles
+  assert.equal(st.reconciles, true);
+  assert.deepEqual(st.accountMovements.map(a => a.id), ['wallet']);
+  approx(st.openingBalance, 100);
+  approx(st.closingBalance, 100 - 40 + 200);
+  approx(st.register[st.register.length - 1].balance, st.closingBalance);
+  // The transfer is money *in* from the wallet's point of view
+  approx(st.register[1].moneyIn, 200);
+});
+
+test('statement row filters narrow the aggregates and drop the running balance', () => {
+  const data = {
+    accounts: [{ id: 'cash', type: 'checking', balance: 500 }],
+    transactions: [
+      { id: 'a', type: 'income', accountId: 'cash', amount: 1000, category: 'Salary', date: '2026-07-02', description: 'pay' },
+      { id: 'b', type: 'expense', accountId: 'cash', amount: 40, category: 'Food', date: '2026-07-03', description: 'groceries' },
+      { id: 'c', type: 'expense', accountId: 'cash', amount: 25, category: 'Transport', date: '2026-07-04', description: 'bus fare' },
+    ],
+  };
+
+  const byCategory = statement(data, '2026-07-01', '2026-07-31', { category: 'Food' });
+  assert.deepEqual(byCategory.register.map(r => r.id), ['b']);
+  approx(byCategory.totalExpense, 40);
+  approx(byCategory.totalIncome, 0);
+  // Hidden rows moved the balance too, so no running balance is offered...
+  assert.equal(byCategory.reconciles, false);
+  assert.equal(byCategory.register[0].balance, null);
+  // ...but the period's real opening/closing balances are unchanged by filtering
+  approx(byCategory.openingBalance, 500);
+  approx(byCategory.closingBalance, 500 + 1000 - 40 - 25);
+
+  const byType = statement(data, '2026-07-01', '2026-07-31', { type: 'expense' });
+  assert.deepEqual(byType.register.map(r => r.id), ['b', 'c']);
+
+  const bySearch = statement(data, '2026-07-01', '2026-07-31', { text: 'BUS' }); // case-insensitive
+  assert.deepEqual(bySearch.register.map(r => r.id), ['c']);
+
+  // No filters at all: unchanged behaviour, balance intact
+  const all = statement(data, '2026-07-01', '2026-07-31');
+  assert.equal(all.reconciles, true);
+  assert.equal(all.count, 3);
+  approx(all.register[2].balance, all.closingBalance);
 });
 
 test('nextOccurrence advances by exactly one period, frequency-aware', () => {

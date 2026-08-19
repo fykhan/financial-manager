@@ -770,6 +770,59 @@ export function accountBalanceAsOf(account, transactions, asOfISO) {
   return (Number(account.balance) || 0) + (isCredit ? -delta : delta);
 }
 
+// ---------------- Keyword search (shared by Transactions + Statement) ----------------
+
+/**
+ * Split a search box's raw text into keywords. Whitespace separates terms,
+ * "double quotes" keep a phrase together, and a leading - excludes. So
+ * `coffee -refund "whole foods"` means: has coffee, not refund, has the phrase
+ * "whole foods". Returns [{ term, negate, phrase }]; a lone `-` or an unclosed
+ * quote is just treated as ordinary text rather than an error.
+ */
+export function parseKeywords(query) {
+  const out = [];
+  // Either a quoted phrase (optionally negated) or a bare run of non-space.
+  const re = /(-?)"([^"]*)"|(-?)(\S+)/g;
+  let m;
+  while ((m = re.exec(String(query || ''))) !== null) {
+    const phrase = m[2] !== undefined;
+    const negate = (phrase ? m[1] : m[3]) === '-';
+    const raw = phrase ? m[2] : m[4];
+    const term = String(raw).trim().toLowerCase();
+    if (term) out.push({ term, negate, phrase });
+  }
+  return out;
+}
+
+/** The text a transaction is searched over: what the user can see on the row. */
+function searchHaystack(t) {
+  return `${t.description || ''} ${t.category || ''} ${t.notes || ''} ${t.type || ''} ${t.amount ?? ''}`.toLowerCase();
+}
+
+/**
+ * Does a transaction match every keyword in `query`? Terms are ANDed (each
+ * narrows the result), negated terms must be absent, and an empty query
+ * matches everything.
+ */
+export function matchesKeywords(t, query) {
+  const hay = searchHaystack(t);
+  return parseKeywords(query).every(k => hay.includes(k.term) !== k.negate);
+}
+
+/**
+ * Does a transaction pass the statement's non-period filters? An empty filter
+ * value means "don't filter on this". `accountId` matches either side of a
+ * transfer, mirroring the Transactions-view filter; `text` is a keyword query
+ * (see matchesKeywords).
+ */
+export function matchesStatementFilter(t, filters = {}) {
+  const { accountId = '', type = '', category = '', text = '' } = filters;
+  if (accountId && t.accountId !== accountId && t.toAccountId !== accountId) return false;
+  if (type && (t.type || '') !== type) return false;
+  if (category && (t.category || 'Other') !== category) return false;
+  return matchesKeywords(t, text);
+}
+
 /**
  * A full account statement for an arbitrary [fromISO, toISO] period:
  * every transaction in the window plus the aggregates a statement wants at
@@ -780,13 +833,26 @@ export function accountBalanceAsOf(account, transactions, asOfISO) {
  * account's `opening` is its balance the day before the period began and
  * `closing` is its balance on the last day of the period; `change` is the
  * difference. An empty `fromISO` opens the period from the beginning of time.
+ *
+ * `filters` ({ accountId, type, category, text }) narrows which transactions
+ * the statement covers. Filtering by account narrows the *scope* of the
+ * report — balances and movements are then that one account's, so the running
+ * balance still reconciles (it's an account statement rather than a
+ * portfolio one). The row-level filters (type/category/text) can't reconcile,
+ * since they hide transactions that really did move the balance; in that case
+ * `reconciles` is false and callers drop the running-balance column.
  */
-export function statement(data, fromISO, toISO) {
+export function statement(data, fromISO, toISO, filters = {}) {
   const accounts = data.accounts || [];
   const allTxns = data.transactions || [];
+  // Filtering by account re-scopes the whole report to that account; the
+  // other filters only hide rows (see the doc comment above).
+  const scopeAccounts = filters.accountId ? accounts.filter(a => a.id === filters.accountId) : accounts;
+  const reconciles = !(filters.type || filters.category || String(filters.text || '').trim());
 
-  const transactions = transactionsInRange(allTxns, fromISO, toISO)
-    .slice()
+  const inRange = transactionsInRange(allTxns, fromISO, toISO);
+  const transactions = inRange
+    .filter(t => matchesStatementFilter(t, filters))
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
   let totalIncome = 0, totalExpense = 0;
@@ -814,7 +880,7 @@ export function statement(data, fromISO, toISO) {
     .sort((a, b) => b.amount - a.amount);
 
   const openingCutoff = fromISO ? dayBefore(fromISO) : '';
-  const accountMovements = accounts.map(a => {
+  const accountMovements = scopeAccounts.map(a => {
     const opening = accountBalanceAsOf(a, allTxns, openingCutoff);
     const closing = accountBalanceAsOf(a, allTxns, toISO);
     return { id: a.id, name: a.name, type: a.type, opening, closing, change: closing - opening };
@@ -832,12 +898,14 @@ export function statement(data, fromISO, toISO) {
   // a debt-only entry touches no account (zero), income/withdraw add, expense/
   // contribute subtract — so the running balance only moves when real money
   // enters or leaves the account pool.
-  const accountIds = accounts.map(a => a.id);
+  const accountIds = scopeAccounts.map(a => a.id);
   let running = openingBalance;
   const register = transactions.map(t => {
     const effect = accountIds.reduce((s, id) => s + literalDelta(t, id), 0);
     running += effect;
-    return { ...t, moneyIn: effect > 0 ? effect : 0, moneyOut: effect < 0 ? -effect : 0, balance: running };
+    // With row-level filters on, a running balance would be a lie (hidden rows
+    // moved it too) — callers hide the column instead.
+    return { ...t, moneyIn: effect > 0 ? effect : 0, moneyOut: effect < 0 ? -effect : 0, balance: reconciles ? running : null };
   });
 
   return {
@@ -846,6 +914,8 @@ export function statement(data, fromISO, toISO) {
     transactions,
     register,
     count: transactions.length,
+    totalCount: inRange.length,
+    reconciles,
     openingBalance,
     closingBalance,
     totalIncome,

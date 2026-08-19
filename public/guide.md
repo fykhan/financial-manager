@@ -87,11 +87,18 @@ Bills, Education…) if you know what the gap was.
 
 **Transactions** is your full ledger. Use the controls at the top to find anything:
 
-- **Search** by description, category, or notes.
+- **Keyword search** over description, category, notes, type and amount.
 - **Category chips** to filter to one category.
 - **Account dropdown** to filter to one account.
 
-Press **/** anywhere to jump here and focus the search box.
+The same keyword search sits on the **Statement** view. Type several words and *all* of them
+have to match, so each word narrows things further — `coffee july` finds only rows mentioning
+both. Wrap words in quotes to match them as a phrase (`"whole foods"`), and put a minus in
+front of a word to exclude it (`-refund`). Once a query has more than one word, each keyword
+appears as a chip below the box — click its **✕** to drop just that one.
+
+Press **/** anywhere to focus the search box (it jumps to Transactions if the view you're on
+doesn't have one).
 
 ---
 
@@ -136,6 +143,13 @@ The **Statement** view is a proper period report — pick **This month**, **Last
 quarter, a year, or a custom date range. When you're viewing a single month, use the **‹ ›**
 buttons to step month by month. Export it as **CSV** or **print / save as PDF**.
 
+Narrow what the statement covers with the filters underneath: **account**, **type**,
+**category**, or a **keyword search** (same syntax as the ledger's). Filtering by account turns it into a
+single-account statement — the balances and movements become that account's. The type, category
+and search filters only hide rows, so the running balance is hidden while they're on (the rows
+you filtered out moved it too); you get filtered totals instead. Exports follow whatever filters
+are active.
+
 ---
 
 ## Your data
@@ -164,7 +178,7 @@ Deleted something by accident? Every delete shows an **Undo** button for a few s
 ### Keyboard shortcuts
 
 - **n** — log a new transaction
-- **/** — jump to Transactions and focus search
+- **/** — focus the keyword search (jumps to Transactions if this view has none)
 - **g** then **d** / **t** / **a** / **s** — go to Dashboard / Transactions / Accounts / Statement
 
 ---

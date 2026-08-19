@@ -9,7 +9,9 @@ import {
   viewTitle, renderDashboard, renderTransactions, renderIncome, renderExpenses,
   renderInstallments, renderSubscriptions, renderSavings, renderAccounts, renderDebts,
   renderStatement, setStatementPreset, setStatementRange, stepStatementMonth, statementCSV, statementFilename, statementDocument,
+  setStatementFilter, clearStatementFilter,
   setAccountFilter, clearAccountFilter, setTxnFilter, clearTxnFilter, renderDrillDown, drillDownTitle,
+  keywordChips, dropKeyword,
   toggleSelect, selectAll, clearSelection, clearAllSelections, getSelectedIds,
   setPage, resetPage, resetAllPages, LIST_FRAGMENTS, setSpendMode,
   renderGuide, loadGuide, guideLoaded,
@@ -88,6 +90,7 @@ function navigate(view) {
   if (!RENDERERS[view]) return;
   clearAccountFilter();
   clearTxnFilter();
+  clearStatementFilter();
   clearAllSelections();
   resetAllPages();
   current = view;
@@ -192,6 +195,35 @@ function openDataMenu() {
     };
     reader.readAsText(file);
   });
+}
+
+// ---------- keyword search ----------
+/** Put the caret back in a search box after its view re-rendered under it. */
+function refocusSearch(scope, caret) {
+  const el = document.querySelector(`[data-kw-search="${scope}"]`);
+  if (!el) return;
+  el.focus();
+  if (caret != null) { try { el.setSelectionRange(caret, caret); } catch { /* type doesn't support it */ } }
+}
+
+/**
+ * Apply a keyword query and refresh the smallest thing that can show it: the
+ * ledger patches just its list fragment + chips (so typing never loses focus),
+ * the statement needs a full render since its totals and panels all move.
+ */
+function applySearch(scope, value, caret) {
+  if (scope === 'statement') {
+    setStatementFilter({ text: value });
+    render();
+    refocusSearch('statement', caret);
+    return;
+  }
+  setTxnFilter({ text: value });
+  resetPage('txn-accounts');
+  const list = document.getElementById('list-txn-accounts');
+  if (list) list.innerHTML = LIST_FRAGMENTS['txn-accounts'](store.getData());
+  const chips = document.getElementById('kw-chips-txn');
+  if (chips) chips.innerHTML = keywordChips('txn');
 }
 
 // ---------- statement PDF (standalone document) ----------
@@ -332,6 +364,14 @@ function wire() {
         },
       });
     }
+    const kwDropBtn = e.target.closest('[data-kw-drop]');
+    if (kwDropBtn) {
+      const [scope, index] = kwDropBtn.dataset.kwDrop.split(':');
+      dropKeyword(scope, parseInt(index, 10));
+      if (scope === 'txn') resetPage('txn-accounts');
+      return render();
+    }
+    if (e.target.closest('[data-statement-filter-clear]')) { clearStatementFilter(); return render(); }
     if (statementPresetBtn) { setStatementPreset(statementPresetBtn.dataset.statementPreset); return render(); }
     const statementStepBtn = e.target.closest('[data-statement-step]');
     if (statementStepBtn) { stepStatementMonth(parseInt(statementStepBtn.dataset.statementStep, 10)); return render(); }
@@ -408,6 +448,12 @@ function wire() {
     const txnAccount = e.target.closest('[data-txn-account]');
     if (txnAccount) { setTxnFilter({ accountId: txnAccount.value }); resetPage('txn-accounts'); return render(); }
 
+    const statementSelect = e.target.closest('[data-statement-filter]');
+    if (statementSelect) {
+      setStatementFilter({ [statementSelect.dataset.statementFilter]: statementSelect.value });
+      return render();
+    }
+
     const dateInput = e.target.closest('[data-statement-date]');
     if (!dateInput) return;
     const from = document.querySelector('[data-statement-date="from"]')?.value || '';
@@ -416,19 +462,19 @@ function wire() {
     render();
   });
 
-  // Ledger search: debounced, and patches ONLY the list fragment so the input
-  // keeps focus (a full render would blow away the field mid-type).
-  let txnSearchTimer;
+  // Keyword search, shared by the Transactions ledger and the Statement.
+  // Debounced either way; how the result is applied differs by scope:
+  //  - txn: patch ONLY the list fragment so the input keeps focus (a full
+  //    render would blow away the field mid-type).
+  //  - statement: no list fragment to patch, so it takes a full render and
+  //    puts the caret back where it was.
+  let searchTimer;
   document.getElementById('view-container').addEventListener('input', e => {
-    const search = e.target.closest('[data-txn-search]');
+    const search = e.target.closest('[data-kw-search]');
     if (!search) return;
-    clearTimeout(txnSearchTimer);
-    txnSearchTimer = setTimeout(() => {
-      setTxnFilter({ text: search.value });
-      resetPage('txn-accounts');
-      const container = document.getElementById('list-txn-accounts');
-      if (container) container.innerHTML = LIST_FRAGMENTS['txn-accounts'](store.getData());
-    }, 200);
+    const scope = search.dataset.kwSearch;
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => applySearch(scope, search.value, search.selectionStart), 220);
   });
 
   // Re-render whenever the store changes.
@@ -437,7 +483,7 @@ function wire() {
   // Hash routing (back/forward + deep links)
   window.addEventListener('hashchange', () => {
     const v = location.hash.replace('#', '');
-    if (RENDERERS[v] && v !== current) { clearAccountFilter(); clearTxnFilter(); current = v; render(); }
+    if (RENDERERS[v] && v !== current) { clearAccountFilter(); clearTxnFilter(); clearStatementFilter(); current = v; render(); }
   });
 
   wireKeyboardShortcuts();
@@ -464,8 +510,9 @@ function wireKeyboardShortcuts() {
     if (e.key === 'n') { e.preventDefault(); openForm('transactions'); return; }
     if (e.key === '/') {
       e.preventDefault();
-      if (current !== 'transactions') navigate('transactions');
-      document.querySelector('[data-txn-search]')?.focus();
+      // Focus the search on whichever view has one; otherwise go to the ledger.
+      if (!document.querySelector('[data-kw-search]')) navigate('transactions');
+      document.querySelector('[data-kw-search]')?.focus();
     }
   });
 }
