@@ -11,4 +11,5 @@ env/
 !.env.example
 env/
 wslenv/
-*/__pycache__/*
+__pycache__/
+*.pyc

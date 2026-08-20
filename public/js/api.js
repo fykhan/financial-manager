@@ -12,7 +12,17 @@ async function request(path, options = {}) {
   }
   if (!res.ok) {
     let detail = res.statusText;
-    try { detail = (await res.json()).detail || detail; } catch { /* not JSON */ }
+    try {
+      const body = await res.json();
+      // FastAPI sends 422 `detail` as an array of {loc, msg} objects, which
+      // would stringify to "[object Object]" — flatten it to "field: reason".
+      detail = Array.isArray(body.detail)
+        ? body.detail.map(e => {
+            const field = Array.isArray(e.loc) ? e.loc.slice(1).join('.') : '';
+            return field ? `${field}: ${e.msg}` : e.msg;
+          }).join('; ')
+        : body.detail || detail;
+    } catch { /* not JSON */ }
     throw new Error(detail);
   }
   if (res.status === 204) return null;

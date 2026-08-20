@@ -5,6 +5,7 @@ with snake_case kwargs.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from pydantic.alias_generators import to_camel
@@ -16,6 +17,26 @@ class CamelModel(BaseModel):
 
 def _blank_to_none(v):
     return None if v == "" else v
+
+
+# Constrained vocabularies, mirroring the <select> options in public/js/forms.js
+# and the exact strings calc.js filters on (`t.type === 'expense'`,
+# `t.debtDirection === 'decrease'`, ...). A value outside these sets used to save
+# fine and then vanish from every total, so they are enforced on the write path.
+# The *Out models widen each one back to `str`: rows written before this existed
+# must still render, and GET /api/data validates against those models.
+#
+# 'one-time' is absent from the form's dropdown but is a real frequency in
+# calc.js's FREQ_PER_YEAR and recurring.py's, so it stays legal here.
+Frequency = Literal[
+    "weekly", "biweekly", "monthly", "quarterly", "semiannually", "annually", "one-time",
+]
+IncomeType = Literal["net", "gross"]
+AccountType = Literal["checking", "savings", "cash", "wallet", "credit"]
+TxnType = Literal["expense", "income", "transfer", "debt", "savings"]
+DebtDirection = Literal["owed_to_me", "owed_by_me"]
+DebtTxnDirection = Literal["increase", "decrease"]
+SavingTxnDirection = Literal["contribute", "withdraw"]
 
 
 # ---- settings ----
@@ -36,8 +57,8 @@ class IncomeIn(CamelModel):
     id: str
     source: str
     amount: float
-    frequency: str
-    type: str = "net"
+    frequency: Frequency
+    type: IncomeType = "net"
     notes: str = ""
     account_id: str | None = None
     next_date: str | None = None
@@ -47,13 +68,15 @@ class IncomeIn(CamelModel):
 
 class IncomeOut(IncomeIn):
     created_at: datetime
+    frequency: str
+    type: str
 
 
 class IncomePatch(CamelModel):
     source: str | None = None
     amount: float | None = None
-    frequency: str | None = None
-    type: str | None = None
+    frequency: Frequency | None = None
+    type: IncomeType | None = None
     notes: str | None = None
     account_id: str | None = None
     next_date: str | None = None
@@ -68,7 +91,7 @@ class ExpenseIn(CamelModel):
     name: str
     category: str
     amount: float
-    frequency: str
+    frequency: Frequency
     notes: str = ""
     account_id: str | None = None
     next_date: str | None = None
@@ -78,13 +101,14 @@ class ExpenseIn(CamelModel):
 
 class ExpenseOut(ExpenseIn):
     created_at: datetime
+    frequency: str
 
 
 class ExpensePatch(CamelModel):
     name: str | None = None
     category: str | None = None
     amount: float | None = None
-    frequency: str | None = None
+    frequency: Frequency | None = None
     notes: str | None = None
     account_id: str | None = None
     next_date: str | None = None
@@ -137,7 +161,7 @@ class SubscriptionIn(CamelModel):
     id: str
     name: str
     amount: float
-    cycle: str
+    cycle: Frequency
     category: str = "Other"
     next_renewal: str | None = None
     notes: str = ""
@@ -148,12 +172,13 @@ class SubscriptionIn(CamelModel):
 
 class SubscriptionOut(SubscriptionIn):
     created_at: datetime
+    cycle: str
 
 
 class SubscriptionPatch(CamelModel):
     name: str | None = None
     amount: float | None = None
-    cycle: str | None = None
+    cycle: Frequency | None = None
     category: str | None = None
     next_renewal: str | None = None
     notes: str | None = None
@@ -215,7 +240,7 @@ class BudgetPatch(CamelModel):
 class AccountIn(CamelModel):
     id: str
     name: str
-    type: str
+    type: AccountType
     balance: float = 0
     credit_limit: float | None = None
     notes: str = ""
@@ -225,11 +250,12 @@ class AccountIn(CamelModel):
 
 class AccountOut(AccountIn):
     created_at: datetime
+    type: str
 
 
 class AccountPatch(CamelModel):
     name: str | None = None
-    type: str | None = None
+    type: AccountType | None = None
     balance: float | None = None
     credit_limit: float | None = None
     notes: str | None = None
@@ -242,18 +268,19 @@ class AccountPatch(CamelModel):
 class DebtIn(CamelModel):
     id: str
     person: str
-    direction: str
+    direction: DebtDirection
     amount: float
     notes: str = ""
 
 
 class DebtOut(DebtIn):
     created_at: datetime
+    direction: str
 
 
 class DebtPatch(CamelModel):
     person: str | None = None
-    direction: str | None = None
+    direction: DebtDirection | None = None
     amount: float | None = None
     notes: str | None = None
 
@@ -265,14 +292,14 @@ class TransactionIn(CamelModel):
     date: str
     description: str
     amount: float
-    type: str
+    type: TxnType
     category: str = "Other"
     account_id: str | None = None
     to_account_id: str | None = None
     debt_id: str | None = None
-    debt_direction: str | None = None
+    debt_direction: DebtTxnDirection | None = None
     saving_id: str | None = None
-    saving_direction: str | None = None
+    saving_direction: SavingTxnDirection | None = None
     notes: str = ""
 
     _blank_accounts = field_validator(
@@ -282,20 +309,23 @@ class TransactionIn(CamelModel):
 
 class TransactionOut(TransactionIn):
     created_at: datetime
+    type: str
+    debt_direction: str | None = None
+    saving_direction: str | None = None
 
 
 class TransactionPatch(CamelModel):
     date: str | None = None
     description: str | None = None
     amount: float | None = None
-    type: str | None = None
+    type: TxnType | None = None
     category: str | None = None
     account_id: str | None = None
     to_account_id: str | None = None
     debt_id: str | None = None
-    debt_direction: str | None = None
+    debt_direction: DebtTxnDirection | None = None
     saving_id: str | None = None
-    saving_direction: str | None = None
+    saving_direction: SavingTxnDirection | None = None
     notes: str | None = None
 
     _blank_accounts = field_validator(
