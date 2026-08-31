@@ -59,6 +59,19 @@ def _advance(iso: str, frequency: str) -> str | None:
     return None  # one-time / unknown: never recurs
 
 
+def _payment_index(start: date, next_due: date, cap: int) -> int:
+    """How many payments a schedule anchored on `start` has already passed.
+
+    Tolerant of pointers left drifted by the pre-fix walk: it returns the first
+    n whose true due date is not before the stored pointer, which re-anchors the
+    row onto the real schedule on the next load — no data backfill needed.
+    """
+    n = 0
+    while n < cap and _add_months(start, n) < next_due:
+        n += 1
+    return n
+
+
 def _amortized_payment(principal: float, apr: float, term_months: int) -> float:
     if term_months <= 0:
         return 0
@@ -117,21 +130,28 @@ def apply_due_transactions(session: Session) -> None:
     for it in session.exec(select(Installment)).all():
         if it.account_id not in account_ids or not it.next_due_date or not it.start_date:
             continue
-        final_date = _add_months(date.fromisoformat(it.start_date), it.term_months)
-        payment = it.monthly_payment or _amortized_payment(it.principal, it.apr, it.term_months)
+        term = it.term_months or 0
+        if term <= 0:
+            continue
+        start = date.fromisoformat(it.start_date)
+        payment = it.monthly_payment or _amortized_payment(it.principal, it.apr, term)
+        # Every due date is derived from start_date rather than walked forward
+        # from the previous pointer. _add_months clamps to the month length, so
+        # feeding a clamped value back in ratchets the day down permanently (a
+        # 31st schedule becomes the 28th after February and never recovers).
+        # Counting payments also replaces the old `next_due < final_date` test,
+        # which compared a drifted pointer against an undrifted boundary and let
+        # a 6-month term post 7 debits; n < term makes that impossible.
+        n = _payment_index(start, date.fromisoformat(it.next_due_date), term)
         guard = 0
-        while (
-            it.next_due_date
-            and date.fromisoformat(it.next_due_date) <= today
-            and date.fromisoformat(it.next_due_date) < final_date
-            and guard < MAX_CATCHUP_PERIODS
-        ):
+        while n < term and _add_months(start, n) <= today and guard < MAX_CATCHUP_PERIODS:
             new_txns.append(Transaction(
-                id=_uid(), date=it.next_due_date, description=it.name, amount=payment,
-                type="expense", category="Debt & loans", account_id=it.account_id,
+                id=_uid(), date=_add_months(start, n).isoformat(), description=it.name,
+                amount=payment, type="expense", category="Debt & loans", account_id=it.account_id,
             ))
-            it.next_due_date = _add_months(date.fromisoformat(it.next_due_date), 1).isoformat()
+            n += 1
             guard += 1
+        it.next_due_date = _add_months(start, n).isoformat()
         session.add(it)
 
     if new_txns:

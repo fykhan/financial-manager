@@ -1,13 +1,21 @@
 {
   "name": "gradplan-financial-manager",
   "version": "1.0.0",
-  "description": "A personal financial planner for newly graduated students — track income, expenses, installments, subscriptions and savings goals with automatic calculations.",
+  "description": "A personal financial planner for newly graduated students \u2014 track income, expenses, installments, subscriptions and savings goals with automatic calculations.",
   "type": "module",
   "scripts": {
     "start": "uvicorn app:app --reload --port 4173",
     "dev": "uvicorn app:app --reload --port 4173",
-    "test": "node --test"
+    "test": "node --test",
+    "test:api": "pytest",
+    "test:all": "node --test && pytest"
   },
-  "keywords": ["finance", "budget", "student", "planner", "money"],
+  "keywords": [
+    "finance",
+    "budget",
+    "student",
+    "planner",
+    "money"
+  ],
   "license": "MIT"
 }

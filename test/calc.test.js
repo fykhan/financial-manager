@@ -38,6 +38,34 @@ test('monthsBetween counts whole elapsed months', () => {
   assert.equal(monthsBetween('', '2026-07-15'), 0);
 });
 
+test('monthsBetween treats a month-end reference as a whole month', () => {
+  // A 31st-anchored schedule lands on the 30th/28th in shorter months. Those
+  // dates are still a whole month on, so they must not be counted short — this
+  // used to report 5 for a six-month span and made a paid-off installment
+  // render as "5 of 6 paid".
+  assert.equal(monthsBetween('2025-12-31', '2026-06-30'), 6);
+  assert.equal(monthsBetween('2025-12-31', '2026-02-28'), 2);
+  assert.equal(monthsBetween('2026-01-31', '2026-02-28'), 1);
+  assert.equal(monthsBetween('2026-01-31', '2026-07-31'), 6);
+  // ...but a mid-month reference that genuinely hasn't reached the anchor day
+  // still counts short.
+  assert.equal(monthsBetween('2026-01-31', '2026-07-15'), 5);
+});
+
+test('installmentStatus counts a month-end schedule as fully paid', () => {
+  // 6 x 200 on a 1200 principal, started 2025-12-31 and now parked on its
+  // final due date: every payment is made and nothing is left outstanding.
+  const st = installmentStatus({
+    principal: 1200, termMonths: 6, monthlyPayment: 200, apr: 0,
+    startDate: '2025-12-31', nextDueDate: '2026-06-30',
+  }, '2026-08-31');
+  assert.equal(st.monthsPaid, 6);
+  assert.equal(st.monthsRemaining, 0);
+  assert.equal(st.active, false);
+  approx(st.totalPaid, 1200);
+  approx(st.remainingBalance, 0);
+});
+
 test('addMonths rolls the calendar forward', () => {
   assert.equal(addMonths('2026-01-31', 1), '2026-03-03'); // JS date roll (Feb overflow)
   assert.equal(addMonths('2026-07-15', 6), '2027-01-15');

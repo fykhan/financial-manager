@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi.encoders import jsonable_encoder
+from pydantic import ValidationError
 from sqlmodel import Session, select
 
 from backend.auth import require_auth
@@ -54,6 +56,18 @@ COLLECTIONS = {
 }
 
 
+def _validate(schema, body: dict):
+    """Bodies arrive as raw dicts (the routes are generic over COLLECTIONS), so
+    validation happens in the handler rather than via a typed parameter — which
+    means a ValidationError raised here is an ordinary exception, not FastAPI's
+    RequestValidationError, and would surface as a 500. Translate it to the 422
+    a typed route would have produced."""
+    try:
+        return schema.model_validate(body)
+    except ValidationError as err:
+        raise HTTPException(status_code=422, detail=jsonable_encoder(err.errors()))
+
+
 def _entry(collection: str):
     entry = COLLECTIONS.get(collection)
     if not entry:
@@ -95,7 +109,7 @@ def get_data(session: Session = Depends(get_session)):
 @router.post("/{collection}")
 def create_record(collection: str, body: dict, session: Session = Depends(get_session)):
     Model, InSchema, OutSchema, _ = _entry(collection)
-    parsed = InSchema.model_validate(body)
+    parsed = _validate(InSchema, body)
     # client-generated id makes this idempotent under retry: merge()
     # inserts if new, updates in place if the id already exists.
     record = session.merge(Model(**parsed.model_dump()))
@@ -110,7 +124,7 @@ def update_record(collection: str, record_id: str, body: dict, session: Session 
     record = session.get(Model, record_id)
     if not record:
         raise HTTPException(status_code=404, detail="not found")
-    patch = PatchSchema.model_validate(body)
+    patch = _validate(PatchSchema, body)
     for field, value in patch.model_dump(exclude_unset=True).items():
         setattr(record, field, value)
     session.add(record)
@@ -156,7 +170,7 @@ def delete_record(collection: str, record_id: str, session: Session = Depends(ge
 
 @router.patch("/settings", response_model=SettingsOut)
 def update_settings(body: dict, session: Session = Depends(get_session)):
-    patch = SettingsPatch.model_validate(body)
+    patch = _validate(SettingsPatch, body)
     settings = _get_settings(session)
     for field, value in patch.model_dump(exclude_unset=True).items():
         setattr(settings, field, value)
@@ -168,7 +182,7 @@ def update_settings(body: dict, session: Session = Depends(get_session)):
 
 @router.post("/data/import", response_model=FullData)
 def import_data(body: dict, session: Session = Depends(get_session)):
-    parsed = FullData.model_validate(body)
+    parsed = _validate(FullData, body)
     _wipe(session)
     settings = _get_settings(session)
     settings.currency = parsed.settings.currency

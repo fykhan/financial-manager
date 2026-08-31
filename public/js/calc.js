@@ -61,7 +61,12 @@ export function monthsBetween(startISO, refISO) {
   const ref = refISO ? new Date(refISO + (String(refISO).length === 10 ? 'T00:00:00' : '')) : new Date();
   if (isNaN(start) || isNaN(ref)) return 0;
   let months = (ref.getFullYear() - start.getFullYear()) * 12 + (ref.getMonth() - start.getMonth());
-  if (ref.getDate() < start.getDate()) months -= 1;
+  // A reference date sitting on the last day of its month can't be "short of"
+  // the anchor day — that month simply has no such day. Without this guard a
+  // schedule anchored on the 31st reports one month too few every time it
+  // lands on a shorter month (Dec 31 -> Jun 30 read as 5 months, not 6).
+  const lastDayOfRefMonth = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).getDate();
+  if (ref.getDate() < start.getDate() && ref.getDate() < lastDayOfRefMonth) months -= 1;
   return Math.max(0, months);
 }
 
