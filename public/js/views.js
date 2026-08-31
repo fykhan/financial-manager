@@ -151,8 +151,9 @@ export function renderDashboard(data) {
   const accountsRow = accountsOverviewRow(data);
   const activity = dashboardActivityRow(data);
   const recap = monthlyRecapPanel(data);
+  const nearTerm = todayWeekPanel(data);
 
-  return `${onboarding}${tiles}${recap}${panels}${health}${accountsRow}${activity}`;
+  return `${onboarding}${tiles}${nearTerm}${recap}${panels}${health}${accountsRow}${activity}`;
 }
 
 const ONBOARD_DISMISS_KEY = 'gradplan.onboardDismiss';
@@ -192,6 +193,42 @@ function onboardingChecklist(data) {
     </div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
       <button type="button" class="btn btn-sm btn-ghost" data-onboard="sample">↺ Or load sample data</button>
+    </div>
+  </div>`;
+}
+
+/**
+ * "Today & this week" — the two shortest statement windows surfaced on the
+ * dashboard, so the near-term picture doesn't need a trip to the Statement
+ * view. Reuses statement() over presetRange() exactly like monthlyRecapPanel,
+ * and each block links through to its matching statement preset.
+ */
+function todayWeekPanel(data) {
+  if (!(data.transactions || []).length) return '';
+  const today = presetRange('today');
+  const week = presetRange('this-week');
+
+  const block = (label, sub, st, preset) => `<div>
+    <div class="flex between center" style="gap:8px;flex-wrap:wrap;margin-bottom:10px">
+      <div>
+        <div class="stat-label">${label}</div>
+        <div class="panel-sub" style="margin:2px 0 0">${sub}</div>
+      </div>
+      <button type="button" class="btn btn-sm btn-ghost" data-recap-statement="${preset}">Statement →</button>
+    </div>
+    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr)">
+      <div class="stat"><div class="stat-label">Money in</div><div class="stat-value tabular text-good">${money(st.totalIncome)}</div></div>
+      <div class="stat"><div class="stat-label">Money out</div><div class="stat-value tabular text-crit">${money(st.totalExpense)}</div></div>
+      <div class="stat"><div class="stat-label">Net</div><div class="stat-value tabular ${st.net >= 0 ? 'text-good' : 'text-crit'}">${money(st.net)}</div></div>
+    </div>
+    <div class="panel-sub" style="margin-top:8px">${st.count ? `${num(st.count)} transaction${st.count === 1 ? '' : 's'}` : 'No activity yet'}</div>
+  </div>`;
+
+  return `<div class="panel" style="margin-bottom:24px">
+    <h3 style="margin:0 0 16px">Today &amp; this week</h3>
+    <div style="display:grid;gap:24px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+      ${block('Today', dateLabel(today.from), statement(data, today.from, today.to), 'today')}
+      ${block('This week', `${dateLabel(week.from)} – ${dateLabel(week.to)}`, statement(data, week.from, week.to), 'this-week')}
     </div>
   </div>`;
 }
@@ -1213,6 +1250,7 @@ function summaryStrip(items) {
 // little bit of UI state (which period is selected) the same module-level way
 // accountFilter/spendMode do — no framework, just a variable + a setter.
 const STATEMENT_PRESETS = [
+  ['today', 'Today'], ['this-week', 'This week'],
   ['this-month', 'This month'], ['last-month', 'Last month'],
   ['this-quarter', 'This quarter'], ['this-year', 'This year'], ['all-time', 'All time'],
 ];
@@ -1225,6 +1263,14 @@ function presetRange(preset) {
   const first = (yy, mm) => iso(new Date(yy, mm, 1));
   const last = (yy, mm) => iso(new Date(yy, mm + 1, 0)); // day 0 of next month = last day of this one
   switch (preset) {
+    case 'today': return { from: iso(now), to: iso(now) };
+    // Monday-start calendar week, spanning the whole week the way 'this-month'
+    // spans the whole month — not a trailing 7 days.
+    case 'this-week': {
+      const dow = (now.getDay() + 6) % 7; // Sun=0 -> 6, Mon=1 -> 0
+      const d = now.getDate();
+      return { from: iso(new Date(y, m, d - dow)), to: iso(new Date(y, m, d - dow + 6)) };
+    }
     case 'last-month': return { from: first(y, m - 1), to: last(y, m - 1) };
     case 'this-quarter': { const q = Math.floor(m / 3) * 3; return { from: first(y, q), to: last(y, q + 2) }; }
     case 'this-year': return { from: `${y}-01-01`, to: `${y}-12-31` };

@@ -334,7 +334,8 @@ function wire() {
     if (spendModeBtn) { setSpendMode(spendModeBtn.dataset.spendMode); return render(); }
     const txnCatBtn = e.target.closest('[data-txn-cat]');
     if (txnCatBtn) { setTxnFilter({ category: txnCatBtn.dataset.txnCat }); resetPage('txn-accounts'); return render(); }
-    if (e.target.closest('[data-recap-statement]')) { setStatementPreset('last-month'); return navigate('statement'); }
+    const recapBtn = e.target.closest('[data-recap-statement]');
+    if (recapBtn) { setStatementPreset(recapBtn.dataset.recapStatement || 'last-month'); return navigate('statement'); }
     const onboardBtn = e.target.closest('[data-onboard]');
     if (onboardBtn) {
       if (onboardBtn.dataset.onboard === 'dismiss') { localStorage.setItem('gradplan.onboardDismiss', '1'); return render(); }
