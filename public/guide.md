@@ -143,12 +143,16 @@ The **Statement** view is a proper period report — pick **This month**, **Last
 quarter, a year, or a custom date range. When you're viewing a single month, use the **‹ ›**
 buttons to step month by month. Export it as **CSV** or **print / save as PDF**.
 
-Narrow what the statement covers with the filters underneath: **account**, **type**,
-**category**, or a **keyword search** (same syntax as the ledger's). Filtering by account turns it into a
-single-account statement — the balances and movements become that account's. The type, category
-and search filters only hide rows, so the running balance is hidden while they're on (the rows
-you filtered out moved it too); you get filtered totals instead. Exports follow whatever filters
-are active.
+Underneath are three rows of filter bubbles — **accounts**, **types**, **categories** — listing
+only the values that actually turn up in the period you picked. They all start lit up, meaning
+everything is showing; click one to drop those transactions, click it again to bring them back.
+Each row has a checkbox that selects or deselects the whole row at once. There's also a
+**keyword search** (same syntax as the ledger's).
+
+Narrowing the accounts turns the report into a statement for just those accounts — the balances
+and movements become theirs. The type, category and search filters only hide rows, so the running
+balance is hidden while they're on (the rows you filtered out moved it too); you get filtered
+totals instead. Exports follow whatever filters are active.
 
 ---
 

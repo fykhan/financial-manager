@@ -841,6 +841,45 @@ test('statement row filters narrow the aggregates and drop the running balance',
   approx(all.register[2].balance, all.closingBalance);
 });
 
+test('statement multi-select filters keep every selected value', () => {
+  const data = {
+    accounts: [
+      { id: 'cash', type: 'checking', balance: 500 },
+      { id: 'wallet', type: 'cash', balance: 100 },
+      { id: 'card', type: 'credit', balance: 0 },
+    ],
+    transactions: [
+      { id: 'a', type: 'income', accountId: 'cash', amount: 1000, category: 'Salary', date: '2026-07-02' },
+      { id: 'b', type: 'expense', accountId: 'wallet', amount: 40, category: 'Food', date: '2026-07-03' },
+      { id: 'c', type: 'expense', accountId: 'card', amount: 25, category: 'Transport', date: '2026-07-04' },
+      { id: 'd', type: 'transfer', accountId: 'cash', toAccountId: 'wallet', amount: 200, date: '2026-07-05' },
+    ],
+  };
+
+  // Two of the three accounts selected: rows on either side of the transfer
+  // count, and the report re-scopes to just those accounts (still reconciles).
+  const twoAccounts = statement(data, '2026-07-01', '2026-07-31', { accountIds: ['cash', 'wallet'] });
+  assert.deepEqual(twoAccounts.register.map(r => r.id), ['a', 'b', 'd']);
+  assert.equal(twoAccounts.reconciles, true);
+  assert.deepEqual(twoAccounts.accountMovements.map(a => a.id), ['cash', 'wallet']);
+  approx(twoAccounts.openingBalance, 600);
+
+  // Types and categories are whitelists, and they hide balance-moving rows.
+  const twoTypes = statement(data, '2026-07-01', '2026-07-31', { types: ['income', 'transfer'] });
+  assert.deepEqual(twoTypes.register.map(r => r.id), ['a', 'd']);
+  assert.equal(twoTypes.reconciles, false);
+
+  const twoCats = statement(data, '2026-07-01', '2026-07-31', { categories: ['Food', 'Transport'] });
+  assert.deepEqual(twoCats.register.map(r => r.id), ['b', 'c']);
+  approx(twoCats.totalExpense, 65);
+
+  // Groups combine, and deselecting everything in a group shows nothing.
+  const combined = statement(data, '2026-07-01', '2026-07-31', { accountIds: ['wallet'], types: ['expense'] });
+  assert.deepEqual(combined.register.map(r => r.id), ['b']);
+  assert.equal(statement(data, '2026-07-01', '2026-07-31', { categories: [] }).count, 0);
+  assert.equal(statement(data, '2026-07-01', '2026-07-31', { categories: [] }).totalCount, 4);
+});
+
 test('nextOccurrence advances by exactly one period, frequency-aware', () => {
   assert.equal(nextOccurrence('2026-07-15', 'weekly'), '2026-07-22');
   assert.equal(nextOccurrence('2026-07-15', 'biweekly'), '2026-07-29');

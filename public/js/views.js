@@ -1254,60 +1254,159 @@ export function stepStatementMonth(delta) {
 
 // Statement content filters, module-local like the period above. Cleared on
 // navigate() so leaving and returning to the view starts clean.
-let statementFilter = { accountId: '', type: '', category: '', text: '' };
+//
+// Account / type / category aren't dropdowns but rows of toggle bubbles listing
+// only the values that actually occur in the selected period, all lit up by
+// default ("showing everything"). So the state kept here is the *deselected*
+// values per group: a value that appears in a new period - a new account, a
+// category used for the first time - starts selected without any migration,
+// and stepping between months doesn't silently drop rows.
+const STATEMENT_GROUPS = ['accounts', 'types', 'categories'];
+const emptyOff = () => ({ accounts: [], types: [], categories: [] });
+
+let statementFilter = { text: '', off: emptyOff() };
 export function setStatementFilter(patch) { statementFilter = { ...statementFilter, ...patch }; }
-export function clearStatementFilter() { statementFilter = { accountId: '', type: '', category: '', text: '' }; }
-function activeStatementFilter() {
-  const f = statementFilter;
-  return !!(f.accountId || f.type || f.category || f.text.trim());
-}
+export function clearStatementFilter() { statementFilter = { text: '', off: emptyOff() }; }
 
 const STATEMENT_TYPES = ['income', 'expense', 'transfer', 'savings', 'debt'];
 
-/** Plain-text description of the active filters, for the printed statement. */
-function statementFilterSummary(data) {
-  const f = statementFilter;
-  const parts = [];
-  if (f.accountId) parts.push(`Account: ${(data.accounts || []).find(a => a.id === f.accountId)?.name || '—'}`);
-  if (f.type) parts.push(`Type: ${titleCase(f.type)}`);
-  if (f.category) parts.push(`Category: ${f.category}`);
-  if (f.text.trim()) parts.push(`Search: "${f.text.trim()}"`);
-  return parts.join(' · ');
+/**
+ * The bubble options for each group - every account / type / category present
+ * in the current period's transactions, computed off the *unfiltered* window
+ * so deselecting one doesn't make the rest of the bubbles disappear.
+ */
+function statementOptions(data) {
+  const period = currentPeriod();
+  const rows = transactionsInRange(data.transactions || [], period.from, period.to);
+  const accountIds = new Set(), types = new Set(), categories = new Set();
+  rows.forEach(t => {
+    if (t.accountId) accountIds.add(t.accountId);
+    if (t.toAccountId) accountIds.add(t.toAccountId);
+    if (t.type) types.add(t.type);
+    categories.add(t.category || 'Other');
+  });
+  const accountName = id => (data.accounts || []).find(a => a.id === id)?.name || 'Unknown account';
+  const extraTypes = [...types].filter(t => !STATEMENT_TYPES.includes(t)).sort();
+  return {
+    accounts: [...accountIds].map(id => ({ value: id, label: accountName(id) }))
+      .sort((a, b) => a.label.localeCompare(b.label)),
+    types: STATEMENT_TYPES.filter(t => types.has(t)).concat(extraTypes)
+      .map(t => ({ value: t, label: titleCase(t) })),
+    categories: [...categories].sort().map(c => ({ value: c, label: c })),
+  };
 }
 
-/** Account / type / category / search controls for the statement contents. */
+/**
+ * Per-group { all, on, filtered }. A deselected value that isn't in this
+ * period at all is ignored rather than counted as an active filter, but it's
+ * kept in state so stepping back to the month it came from restores it.
+ */
+function statementSelection(options) {
+  const sel = {};
+  STATEMENT_GROUPS.forEach(g => {
+    const all = options[g].map(o => o.value);
+    const off = statementFilter.off[g].filter(v => all.includes(v));
+    sel[g] = { all, on: all.filter(v => !off.includes(v)), filtered: off.length > 0 };
+  });
+  return sel;
+}
+
+/**
+ * Translate the bubble selection into the { accountIds, types, categories, text }
+ * shape calc.statement() takes - a group with nothing deselected is left out
+ * entirely, so an unfiltered statement still reconciles its running balance.
+ */
+function statementFilterFor(data) {
+  const sel = statementSelection(statementOptions(data));
+  const f = { text: statementFilter.text };
+  if (sel.accounts.filtered) f.accountIds = sel.accounts.on;
+  if (sel.types.filtered) f.types = sel.types.on;
+  if (sel.categories.filtered) f.categories = sel.categories.on;
+  return f;
+}
+
+/** Toggle a single bubble on/off. */
+export function toggleStatementChip(group, value) {
+  if (!STATEMENT_GROUPS.includes(group)) return;
+  const off = statementFilter.off[group];
+  const next = off.includes(value) ? off.filter(v => v !== value) : off.concat(value);
+  statementFilter = { ...statementFilter, off: { ...statementFilter.off, [group]: next } };
+}
+
+/** The row's select-all / deselect-all checkbox - scoped to this period's values. */
+export function setStatementGroupAll(data, group, on) {
+  if (!STATEMENT_GROUPS.includes(group)) return;
+  const all = statementOptions(data)[group].map(o => o.value);
+  const kept = statementFilter.off[group].filter(v => !all.includes(v)); // other periods' choices
+  statementFilter = {
+    ...statementFilter,
+    off: { ...statementFilter.off, [group]: on ? kept : kept.concat(all) },
+  };
+}
+
+function activeStatementFilter(data) {
+  if (statementFilter.text.trim()) return true;
+  const sel = statementSelection(statementOptions(data));
+  return STATEMENT_GROUPS.some(g => sel[g].filtered);
+}
+
+/** Plain-text description of the active filters, for the printed statement. */
+function statementFilterSummary(data) {
+  const options = statementOptions(data);
+  const sel = statementSelection(options);
+  const parts = [];
+  const list = (g, label) => {
+    if (!sel[g].filtered) return;
+    const names = sel[g].on.map(v => options[g].find(o => o.value === v)?.label || v);
+    parts.push(`${label}: ${names.join(', ') || 'none'}`);
+  };
+  list('accounts', 'Accounts');
+  list('types', 'Types');
+  list('categories', 'Categories');
+  if (statementFilter.text.trim()) parts.push(`Search: "${statementFilter.text.trim()}"`);
+  return parts.join(' \u00b7 ');
+}
+
+/** One labelled row of filter bubbles plus its select-all / deselect-all box. */
+function bubbleRow(group, label, options, groupSel) {
+  if (!options.length) return '';
+  const allOn = !groupSel.filtered;
+  return `<div class="bubble-row">
+    <label class="bubble-all" title="${allOn ? 'Deselect all' : 'Select all'}">
+      <input type="checkbox" data-statement-all="${group}" ${allOn ? 'checked' : ''}>
+      <span>${escapeHtml(label)}</span>
+    </label>
+    <div class="bubbles" role="group" aria-label="Filter by ${escapeHtml(label.toLowerCase())}">
+      ${options.map(o => {
+        const on = groupSel.on.includes(o.value);
+        return `<button type="button" class="chip chip-toggle${on ? ' on' : ''}"
+          data-statement-chip="${group}:${escapeHtml(o.value)}" aria-pressed="${on}">${escapeHtml(o.label)}</button>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+/** Account / type / category bubbles + keyword search for the statement contents. */
 function statementFilterControls(data, st) {
-  const f = statementFilter;
-  const accounts = data.accounts || [];
-
-  // Categories present in the period — computed off the *unfiltered* window so
-  // picking one doesn't collapse the list to just that option.
-  const period = currentPeriod();
-  const cats = [...new Set(transactionsInRange(data.transactions || [], period.from, period.to)
-    .map(t => t.category || 'Other'))].sort();
-
-  const opt = (value, label, selected) =>
-    `<option value="${escapeHtml(value)}" ${selected ? 'selected' : ''}>${escapeHtml(label)}</option>`;
-
-  const accountOptions = [opt('', 'All accounts', !f.accountId)]
-    .concat(accounts.map(a => opt(a.id, a.name, f.accountId === a.id))).join('');
-  const typeOptions = [opt('', 'All types', !f.type)]
-    .concat(STATEMENT_TYPES.map(t => opt(t, titleCase(t), f.type === t))).join('');
-  const catOptions = [opt('', 'All categories', !f.category)]
-    .concat(cats.map(c => opt(c, c, f.category === c))).join('');
+  const options = statementOptions(data);
+  const sel = statementSelection(options);
+  const anyOptions = STATEMENT_GROUPS.some(g => options[g].length);
+  const active = activeStatementFilter(data);
 
   return `<div class="panel no-print" style="margin-bottom:20px">
-    <div class="flex wrap gap-12 center">
-      <select class="input input-sm" data-statement-filter="accountId" aria-label="Filter by account" style="min-width:150px">${accountOptions}</select>
-      <select class="input input-sm" data-statement-filter="type" aria-label="Filter by type" style="min-width:130px">${typeOptions}</select>
-      <select class="input input-sm" data-statement-filter="category" aria-label="Filter by category" style="min-width:150px">${catOptions}</select>
-      ${keywordSearch('statement', f.text, 'Search keywords — description, notes…')}
-      ${activeStatementFilter() ? '<button type="button" class="btn btn-sm btn-ghost" data-statement-filter-clear>Clear filters</button>' : ''}
+    ${anyOptions ? `<div class="bubble-filters">
+      ${bubbleRow('accounts', 'Accounts', options.accounts, sel.accounts)}
+      ${bubbleRow('types', 'Types', options.types, sel.types)}
+      ${bubbleRow('categories', 'Categories', options.categories, sel.categories)}
+    </div>` : `<div class="text-muted" style="font-size:12px">No transactions in this period to filter.</div>`}
+    <div class="flex wrap gap-12 center" style="margin-top:14px">
+      ${keywordSearch('statement', statementFilter.text, 'Search keywords \u2014 description, notes\u2026')}
+      ${active ? '<button type="button" class="btn btn-sm btn-ghost" data-statement-filter-clear>Clear filters</button>' : ''}
     </div>
-    ${activeStatementFilter() ? `<div class="text-muted" style="font-size:12px;margin-top:8px">
+    ${active ? `<div class="text-muted" style="font-size:12px;margin-top:8px">
       Showing ${num(st.count)} of ${num(st.totalCount)} transaction${st.totalCount === 1 ? '' : 's'} in this period${
-        f.accountId ? ' · balances are for the selected account only' : ''}${
-        st.reconciles ? '' : ' · running balance hidden while rows are filtered'}
+        sel.accounts.filtered ? ' \u00b7 balances are for the selected accounts only' : ''}${
+        st.reconciles ? '' : ' \u00b7 running balance hidden while rows are filtered'}
     </div>` : ''}
   </div>`;
 }
@@ -1363,9 +1462,11 @@ export function renderStatement(data) {
     return `${header}<div class="card">${empty('▦', 'Nothing to report yet', 'Add accounts and log some transactions, then come back to generate a statement for any period.', 'accounts')}</div>`;
   }
 
-  const st = statement(data, period.from, period.to, statementFilter);
-  const scopeName = statementFilter.accountId
-    ? (data.accounts || []).find(a => a.id === statementFilter.accountId)?.name : '';
+  const st = statement(data, period.from, period.to, statementFilterFor(data));
+  // A single selected account reads like a bank statement for that account.
+  const accountSel = statementSelection(statementOptions(data)).accounts;
+  const scopeName = accountSel.filtered && accountSel.on.length === 1
+    ? (data.accounts || []).find(a => a.id === accountSel.on[0])?.name : '';
   const printedRange = `<div class="statement-range flex between center" style="margin-bottom:20px;flex-wrap:wrap;gap:12px">
     <div>
       <h2 style="margin:0 0 2px">Statement${scopeName ? ` · ${escapeHtml(scopeName)}` : ''} — ${escapeHtml(periodLabel(period))}</h2>
@@ -1413,7 +1514,7 @@ function statementTargetText(t, data) {
  */
 export function statementCSV(data) {
   const period = currentPeriod();
-  const st = statement(data, period.from, period.to, statementFilter);
+  const st = statement(data, period.from, period.to, statementFilterFor(data));
   const r2 = n => (n ? Math.round(n * 100) / 100 : '');
 
   const rows = [['Date', 'Description', 'Type', 'Category', 'Account', 'Money In', 'Money Out', 'Balance', 'Scheduled', 'Notes']];
@@ -1434,9 +1535,9 @@ export function statementCSV(data) {
 }
 
 /** A filename-safe token for the current statement period, e.g. "2026-07-01_to_2026-07-31". */
-export function statementFilename() {
+export function statementFilename(data) {
   const p = currentPeriod();
-  return `${p.from || 'start'}_to_${p.to || 'today'}${activeStatementFilter() ? '_filtered' : ''}`;
+  return `${p.from || 'start'}_to_${p.to || 'today'}${activeStatementFilter(data) ? '_filtered' : ''}`;
 }
 
 /**
@@ -1448,7 +1549,7 @@ export function statementFilename() {
  */
 export function statementDocument(data) {
   const period = currentPeriod();
-  const st = statement(data, period.from, period.to, statementFilter);
+  const st = statement(data, period.from, period.to, statementFilterFor(data));
   const holder = (data.settings && data.settings.name) || 'Account holder';
   const cur = getCurrency();
   const cell = v => (v ? money(v) : '—');

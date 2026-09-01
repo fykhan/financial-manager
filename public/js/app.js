@@ -9,7 +9,7 @@ import {
   viewTitle, renderDashboard, renderTransactions, renderIncome, renderExpenses,
   renderInstallments, renderSubscriptions, renderSavings, renderAccounts, renderDebts,
   renderStatement, setStatementPreset, setStatementRange, stepStatementMonth, statementCSV, statementFilename, statementDocument,
-  setStatementFilter, clearStatementFilter,
+  setStatementFilter, clearStatementFilter, toggleStatementChip, setStatementGroupAll,
   setAccountFilter, clearAccountFilter, setTxnFilter, clearTxnFilter, renderDrillDown, drillDownTitle,
   keywordChips, dropKeyword,
   toggleSelect, selectAll, clearSelection, clearAllSelections, getSelectedIds,
@@ -373,12 +373,20 @@ function wire() {
       return render();
     }
     if (e.target.closest('[data-statement-filter-clear]')) { clearStatementFilter(); return render(); }
+    const statementChip = e.target.closest('[data-statement-chip]');
+    if (statementChip) {
+      // group:value — split on the FIRST colon only, since a category name can contain one.
+      const raw = statementChip.dataset.statementChip;
+      const i = raw.indexOf(':');
+      toggleStatementChip(raw.slice(0, i), raw.slice(i + 1));
+      return render();
+    }
     if (statementPresetBtn) { setStatementPreset(statementPresetBtn.dataset.statementPreset); return render(); }
     const statementStepBtn = e.target.closest('[data-statement-step]');
     if (statementStepBtn) { stepStatementMonth(parseInt(statementStepBtn.dataset.statementStep, 10)); return render(); }
     if (statementExportBtn) {
       if (statementExportBtn.dataset.statementExport === 'csv') {
-        download(`gradplan-statement-${statementFilename()}.csv`, statementCSV(store.getData()), 'text/csv');
+        download(`gradplan-statement-${statementFilename(store.getData())}.csv`, statementCSV(store.getData()), 'text/csv');
         toast('Statement CSV downloaded', 'good');
       } else {
         printStatementDocument(statementDocument(store.getData()));
@@ -449,9 +457,9 @@ function wire() {
     const txnAccount = e.target.closest('[data-txn-account]');
     if (txnAccount) { setTxnFilter({ accountId: txnAccount.value }); resetPage('txn-accounts'); return render(); }
 
-    const statementSelect = e.target.closest('[data-statement-filter]');
-    if (statementSelect) {
-      setStatementFilter({ [statementSelect.dataset.statementFilter]: statementSelect.value });
+    const statementAll = e.target.closest('[data-statement-all]');
+    if (statementAll) {
+      setStatementGroupAll(store.getData(), statementAll.dataset.statementAll, statementAll.checked);
       return render();
     }
 

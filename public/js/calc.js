@@ -818,13 +818,20 @@ export function matchesKeywords(t, query) {
  * Does a transaction pass the statement's non-period filters? An empty filter
  * value means "don't filter on this". `accountId` matches either side of a
  * transfer, mirroring the Transactions-view filter; `text` is a keyword query
- * (see matchesKeywords).
+ * (see matchesKeywords). The plural forms (`accountIds`/`types`/`categories`)
+ * are the multi-select equivalents the statement's filter bubbles use — an
+ * array is a whitelist of the values still selected, so `[]` matches nothing
+ * and omitting the key means "no filter on this".
  */
 export function matchesStatementFilter(t, filters = {}) {
   const { accountId = '', type = '', category = '', text = '' } = filters;
+  const { accountIds, types, categories } = filters;
   if (accountId && t.accountId !== accountId && t.toAccountId !== accountId) return false;
+  if (accountIds && !accountIds.includes(t.accountId) && !accountIds.includes(t.toAccountId)) return false;
   if (type && (t.type || '') !== type) return false;
+  if (types && !types.includes(t.type || '')) return false;
   if (category && (t.category || 'Other') !== category) return false;
+  if (categories && !categories.includes(t.category || 'Other')) return false;
   return matchesKeywords(t, text);
 }
 
@@ -839,7 +846,7 @@ export function matchesStatementFilter(t, filters = {}) {
  * `closing` is its balance on the last day of the period; `change` is the
  * difference. An empty `fromISO` opens the period from the beginning of time.
  *
- * `filters` ({ accountId, type, category, text }) narrows which transactions
+ * `filters` ({ accountId(s), type(s), category/categories, text }) narrows which transactions
  * the statement covers. Filtering by account narrows the *scope* of the
  * report — balances and movements are then that one account's, so the running
  * balance still reconciles (it's an account statement rather than a
@@ -852,8 +859,10 @@ export function statement(data, fromISO, toISO, filters = {}) {
   const allTxns = data.transactions || [];
   // Filtering by account re-scopes the whole report to that account; the
   // other filters only hide rows (see the doc comment above).
-  const scopeAccounts = filters.accountId ? accounts.filter(a => a.id === filters.accountId) : accounts;
-  const reconciles = !(filters.type || filters.category || String(filters.text || '').trim());
+  const scopeIds = filters.accountId ? [filters.accountId] : (filters.accountIds || null);
+  const scopeAccounts = scopeIds ? accounts.filter(a => scopeIds.includes(a.id)) : accounts;
+  const reconciles = !(filters.type || filters.types || filters.category || filters.categories
+    || String(filters.text || '').trim());
 
   const inRange = transactionsInRange(allTxns, fromISO, toISO);
   const transactions = inRange
