@@ -127,6 +127,55 @@
   --sun:         none;
 }
 
+/* ---------- Tokens: HAND-DRAWN (sketchbook, cut-paper collage) ---------- */
+:root[data-theme="handdrawn"] {
+  --plane:      #fdfbf7;
+  --surface-1:  #ffffff;
+  --surface-2:  #ffffff;
+  --sidebar:    #ffffff;
+  --text-1:     #2d2d2d;
+  --text-2:     rgba(45, 45, 45, 0.68);
+  --muted:      #a8a196;
+  --grid:       #e5e0d8;
+  --line:       #2d2d2d;
+  --border:     #2d2d2d;
+  --border-2:   #2d2d2d;
+
+  --accent:     #ff4d4d;                 /* red correction marker */
+  --accent-2:   #2d5da1;                 /* blue ballpoint pen */
+  --accent-3:   #fff9c4;                 /* post-it yellow */
+  --accent-ink: #ffffff;
+
+  --good:       #2f7d4f;
+  --good-text:  #256b41;
+  --warning:    #a8790a;
+  --serious:    #a1592d;
+  --critical:   #ff4d4d;
+
+  --radius:     16px;
+  --radius-sm:  10px;
+  --chamfer:    0px;
+  --chamfer-sm: 0px;
+
+  /* Irregular "wobbly" ellipse radii — the theme's signature: no straight,
+     symmetric corners anywhere. Three sizes cover buttons/chips, cards, and
+     modals/large panels. */
+  --wobbly-sm:  14px 22px 12px 24px / 18px 12px 22px 14px;
+  --wobbly-md:  26px 34px 24px 36px / 30px 22px 34px 26px;
+  --wobbly-lg:  40px 30px 46px 32px / 34px 44px 28px 42px;
+
+  --glow-accent:    none;
+  --glow-accent-2:  none;
+  --shadow:     4px 4px 0 0 var(--border);
+
+  --font-head:  "Kalam", cursive;
+  --font:       "Patrick Hand", cursive;
+
+  --scanline-op: 0;
+  --grid-op:     0.5;
+  --sun:         none;
+}
+
 /* Chamfered "cut corner" panels — the tech-schematic signature that
    replaces border-radius everywhere. Border-top accent stripes still
    read correctly since clip-path cuts the whole box uniformly. */
@@ -1136,3 +1185,308 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2
   box-shadow: 4px 4px 0 0 var(--border);
 }
 [data-theme="bauhaus"] .bottom-nav { border-top: 4px solid var(--border); }
+
+/* ============================================================
+   HAND-DRAWN THEME — sketchbook / cut-paper collage overrides
+   Wobbly asymmetric border-radii instead of chamfers or right
+   angles, thick pencil-black borders, hard offset shadows (no
+   blur), dashed secondary lines, and small playful rotations.
+   Colors/fonts come from the token block above; this section only
+   touches structure that isn't var()-driven.
+   ============================================================ */
+[data-theme="handdrawn"] body { letter-spacing: normal; }
+[data-theme="handdrawn"] body::before {
+  background-image: radial-gradient(var(--grid) 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+}
+[data-theme="handdrawn"] body::after { display: none; }
+
+[data-theme="handdrawn"] .chamfer,
+[data-theme="handdrawn"] .chamfer-sm,
+[data-theme="handdrawn"] .card,
+[data-theme="handdrawn"] .stat,
+[data-theme="handdrawn"] .panel,
+[data-theme="handdrawn"] .table-wrap,
+[data-theme="handdrawn"] .modal,
+[data-theme="handdrawn"] .toast {
+  clip-path: none;
+}
+
+[data-theme="handdrawn"] .glitch-text,
+[data-theme="handdrawn"] .brand-text strong,
+[data-theme="handdrawn"] .view-title {
+  animation: none !important;
+  text-shadow: none !important;
+}
+[data-theme="handdrawn"] .view-title {
+  text-transform: none;
+  font-weight: 700;
+  display: inline-block;
+  transform: rotate(-1deg);
+}
+[data-theme="handdrawn"] .view-title::before { content: ""; }
+[data-theme="handdrawn"] .brand-text small { color: var(--accent-2); text-transform: none; letter-spacing: 0.02em; }
+
+[data-theme="handdrawn"] .brand-mark {
+  clip-path: none;
+  border-radius: 9999px;
+  border: 3px solid var(--border);
+  box-shadow: 3px 3px 0 0 var(--border);
+  transform: rotate(-4deg);
+}
+
+[data-theme="handdrawn"] .sidebar {
+  backdrop-filter: none;
+  border-right: 3px dashed var(--border);
+  box-shadow: none;
+}
+[data-theme="handdrawn"] .sidebar.open { box-shadow: none; }
+[data-theme="handdrawn"] .topbar {
+  backdrop-filter: none;
+  background: var(--plane);
+  border-bottom: 3px dashed var(--border);
+  box-shadow: none;
+}
+
+[data-theme="handdrawn"] .nav-item {
+  text-shadow: none;
+  font-weight: 400;
+  border-left-width: 3px;
+  transition: transform 0.1s ease-out, background 0.1s ease-out, color 0.1s ease-out;
+}
+[data-theme="handdrawn"] .nav-item:hover {
+  background: var(--accent-3);
+  border-left-color: var(--border);
+  color: var(--text-1);
+  text-shadow: none;
+  transform: rotate(-1deg);
+}
+[data-theme="handdrawn"] .nav-item[aria-current="true"] {
+  background: var(--accent);
+  border-left-color: var(--border);
+  color: #fff;
+  text-shadow: none;
+  transform: rotate(1deg);
+}
+[data-theme="handdrawn"] .nav-item[aria-current="true"] .nav-ico { color: #fff; opacity: 1; }
+
+/* Cards/stats/panels/tables: white paper, wobbly outline, hard shadow, gentle tilt */
+[data-theme="handdrawn"] .card,
+[data-theme="handdrawn"] .stat,
+[data-theme="handdrawn"] .panel {
+  backdrop-filter: none;
+  border: 2px solid var(--border);
+  border-top: 2px solid var(--border);
+  border-radius: var(--wobbly-md);
+  box-shadow: var(--shadow);
+  transition: transform 0.12s ease-out, box-shadow 0.12s ease-out;
+}
+[data-theme="handdrawn"] .table-wrap {
+  backdrop-filter: none;
+  border: 2px solid var(--border);
+  border-top: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+}
+[data-theme="handdrawn"] .card:nth-of-type(odd) { transform: rotate(-0.6deg); }
+[data-theme="handdrawn"] .card:nth-of-type(even) { transform: rotate(0.6deg); }
+[data-theme="handdrawn"] .card:hover,
+[data-theme="handdrawn"] .stat:hover,
+[data-theme="handdrawn"] .account-card:hover {
+  transform: rotate(-1deg) translateY(-2px);
+  box-shadow: 6px 6px 0 0 var(--border);
+}
+[data-theme="handdrawn"] .account-card.selected {
+  border-color: var(--border);
+  box-shadow: 6px 6px 0 0 var(--accent);
+}
+[data-theme="handdrawn"] .card { position: relative; }
+[data-theme="handdrawn"] .card::after {
+  content: "";
+  position: absolute; top: -8px; left: 50%; transform: translateX(-50%) rotate(-2deg);
+  width: 15px; height: 15px;
+  background: var(--accent);
+  border: 2px solid var(--border);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+[data-theme="handdrawn"] .section-head h2,
+[data-theme="handdrawn"] .panel h3,
+[data-theme="handdrawn"] .empty h3 {
+  text-shadow: none;
+  font-weight: 700;
+  letter-spacing: normal;
+  text-transform: none;
+}
+[data-theme="handdrawn"] .stat-value { text-shadow: none; font-weight: 700; }
+[data-theme="handdrawn"] .stat-sub.pos,
+[data-theme="handdrawn"] .stat-sub.neg { text-shadow: none; }
+
+/* Buttons: wobbly, thick border, flattens on press */
+[data-theme="handdrawn"] .btn {
+  clip-path: none;
+  border-radius: var(--wobbly-sm);
+  border: 3px solid var(--border);
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  box-shadow: 4px 4px 0 0 var(--border);
+  transition: transform 0.1s ease-out, box-shadow 0.1s ease-out, background 0.1s ease-out, color 0.1s ease-out;
+}
+[data-theme="handdrawn"] .btn:hover {
+  border-color: var(--border);
+  color: var(--text-1);
+  text-shadow: none;
+  box-shadow: 2px 2px 0 0 var(--border);
+  transform: translate(2px, 2px) rotate(-1deg);
+}
+[data-theme="handdrawn"] .btn:active {
+  transform: translate(4px, 4px);
+  box-shadow: none;
+}
+[data-theme="handdrawn"] .btn-primary {
+  background: #ffffff;
+  color: var(--text-1);
+}
+[data-theme="handdrawn"] .btn-primary::before { content: none; }
+[data-theme="handdrawn"] .btn-primary:hover {
+  background: var(--accent);
+  filter: none;
+  color: #fff;
+}
+[data-theme="handdrawn"] .btn-ghost {
+  border-color: transparent;
+  box-shadow: none;
+  background: var(--muted);
+}
+[data-theme="handdrawn"] .btn-ghost:hover {
+  border-color: transparent;
+  background: var(--accent-2);
+  color: #fff;
+  box-shadow: none;
+  transform: none;
+}
+[data-theme="handdrawn"] .btn-danger {
+  border-color: var(--critical);
+  color: var(--critical);
+  box-shadow: 4px 4px 0 0 var(--critical);
+}
+[data-theme="handdrawn"] .btn-danger:hover {
+  background: var(--critical);
+  color: #fff;
+  box-shadow: 2px 2px 0 0 var(--critical);
+  text-shadow: none;
+}
+
+/* Inputs: full wobbly box, blue focus ring instead of glow */
+[data-theme="handdrawn"] .input,
+[data-theme="handdrawn"] select.input,
+[data-theme="handdrawn"] textarea.input {
+  clip-path: none;
+  border-radius: var(--wobbly-sm);
+  border: 2px solid var(--border);
+  font-weight: 400;
+}
+[data-theme="handdrawn"] .input:focus {
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 4px rgba(45, 93, 161, 0.2);
+  outline: none;
+}
+[data-theme="handdrawn"] .input[aria-invalid="true"] { border-color: var(--critical); }
+[data-theme="handdrawn"] .input[aria-invalid="true"]:focus { box-shadow: 0 0 0 4px rgba(255, 77, 77, 0.2); }
+
+/* Badges: solid sticky-note fills */
+[data-theme="handdrawn"] .badge {
+  border: 2px solid var(--border);
+  border-radius: var(--wobbly-sm);
+  box-shadow: none;
+  font-weight: 400;
+}
+[data-theme="handdrawn"] .badge.accent { background: var(--accent); color: #fff; box-shadow: none; }
+[data-theme="handdrawn"] .badge.good { background: var(--good); color: #fff; box-shadow: none; }
+[data-theme="handdrawn"] .badge.warn { background: var(--accent-3); color: var(--text-1); box-shadow: none; }
+[data-theme="handdrawn"] .badge.crit { background: var(--critical); color: #fff; box-shadow: none; }
+
+/* Progress bars: flat fill inside a wobbly outline */
+[data-theme="handdrawn"] .progress { border-radius: var(--wobbly-sm); border: 2px solid var(--border); background: #fff; }
+[data-theme="handdrawn"] .progress > span,
+[data-theme="handdrawn"] .progress.good > span { background: var(--accent-2); box-shadow: none; }
+[data-theme="handdrawn"] .progress.good > span { background: var(--good); }
+
+/* Charts */
+[data-theme="handdrawn"] .chart svg { filter: none; }
+[data-theme="handdrawn"] .legend-swatch,
+[data-theme="handdrawn"] .stat .dot { box-shadow: none; border: 2px solid var(--border); border-radius: 9999px; }
+[data-theme="handdrawn"] .bar-track { fill: var(--muted); }
+
+/* Modal: wobbly frame, dashed head, post-it yellow banner */
+[data-theme="handdrawn"] .modal {
+  border: 3px solid var(--border);
+  border-radius: var(--wobbly-lg);
+  box-shadow: 8px 8px 0 0 var(--border);
+  animation: none;
+}
+[data-theme="handdrawn"] .modal-backdrop { background: rgba(45, 45, 45, 0.5); backdrop-filter: none; }
+[data-theme="handdrawn"] .modal-head {
+  background: var(--accent-3);
+  border-bottom: 3px dashed var(--border);
+}
+[data-theme="handdrawn"] .modal-head h2 { text-shadow: none; color: var(--text-1); }
+[data-theme="handdrawn"] .calc-preview {
+  background: var(--accent-3);
+  border: 2px dashed var(--border);
+  border-left: 5px solid var(--accent-2);
+  border-radius: var(--radius-sm);
+}
+[data-theme="handdrawn"] .calc-preview .row strong { color: var(--accent-2); }
+
+/* Chips: dashed sticky-tag look */
+[data-theme="handdrawn"] .chip {
+  clip-path: none;
+  border-radius: var(--wobbly-sm);
+  border: 2px dashed var(--border);
+  font-weight: 400;
+}
+[data-theme="handdrawn"] .chip:hover { border-style: solid; color: var(--text-1); background: var(--accent-3); box-shadow: none; }
+[data-theme="handdrawn"] .chip-toggle.on {
+  color: #fff;
+  background: var(--accent-2);
+  border-color: var(--border);
+  border-style: solid;
+  box-shadow: none;
+}
+
+/* Tables — kept mostly straight for readability, just recolored */
+[data-theme="handdrawn"] table.data th { background: var(--accent-3); color: var(--text-1); font-weight: 700; }
+[data-theme="handdrawn"] table.data tr:hover td { background: var(--muted); }
+[data-theme="handdrawn"] table.data td[data-label]::before { color: var(--accent-2); }
+
+/* Toast: tilted sticky note */
+[data-theme="handdrawn"] .toast {
+  background: var(--accent-3);
+  border: 2px solid var(--border);
+  border-left: 5px solid var(--accent-2);
+  border-radius: var(--radius-sm);
+  box-shadow: 4px 4px 0 0 var(--border);
+  transform: rotate(-1deg);
+}
+[data-theme="handdrawn"] .toast.good { border-left-color: var(--good); }
+[data-theme="handdrawn"] .toast.err { border-left-color: var(--critical); background: #fff; }
+[data-theme="handdrawn"] .toast-action {
+  clip-path: none;
+  border-radius: var(--wobbly-sm);
+  border: 2px solid var(--border);
+  color: var(--text-1);
+  background: #fff;
+}
+[data-theme="handdrawn"] .toast-action:hover { background: var(--accent); color: #fff; }
+
+/* Mobile FAB / bottom-nav "+" — circle, pencil-outlined */
+[data-theme="handdrawn"] .fab,
+[data-theme="handdrawn"] .bottom-nav-log-plus {
+  clip-path: none;
+  border-radius: 9999px;
+  border: 3px solid var(--border);
+  box-shadow: 3px 3px 0 0 var(--border);
+}
+[data-theme="handdrawn"] .bottom-nav { border-top: 3px dashed var(--border); }

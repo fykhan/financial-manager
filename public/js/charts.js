@@ -5,14 +5,16 @@ import { money, moneyCompact, pct, escapeHtml, dateLabel } from './format.js';
 // Categorical palette (validated order). Light stays print-safe; dark goes neon.
 // Index 1 (income) and 5 (expenses) are kept high-contrast — see compareBars callers.
 const PALETTE = {
-  light:   ['#2a78d6', '#008300', '#e87ba4', '#eda100', '#1baf7a', '#eb6834', '#4a3aa7', '#e34948'],
-  dark:    ['#00ffff', '#00ff9f', '#ff00ff', '#ffcf1a', '#b47bff', '#ff6a3d', '#5ad1ff', '#ff4d6d'],
-  bauhaus: ['#D02020', '#1040C0', '#F0C020', '#121212', '#8a3a10', '#1a6b3a', '#6a1ba8', '#c05a00'],
+  light:     ['#2a78d6', '#008300', '#e87ba4', '#eda100', '#1baf7a', '#eb6834', '#4a3aa7', '#e34948'],
+  dark:      ['#00ffff', '#00ff9f', '#ff00ff', '#ffcf1a', '#b47bff', '#ff6a3d', '#5ad1ff', '#ff4d6d'],
+  bauhaus:   ['#D02020', '#1040C0', '#F0C020', '#121212', '#8a3a10', '#1a6b3a', '#6a1ba8', '#c05a00'],
+  handdrawn: ['#ff4d4d', '#2d5da1', '#2d2d2d', '#c9a227', '#3f7d4f', '#a15d2d', '#7a4fa1', '#c0567a'],
 };
 
+const THEMES = new Set(['light', 'bauhaus', 'handdrawn']);
 function theme() {
   const t = document.documentElement.dataset.theme;
-  return (t === 'light' || t === 'bauhaus') ? t : 'dark';
+  return THEMES.has(t) ? t : 'dark';
 }
 export function seriesColor(i) {
   const p = PALETTE[theme()];
