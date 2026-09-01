@@ -134,8 +134,8 @@
   --surface-2:  #ffffff;
   --sidebar:    #ffffff;
   --text-1:     #2d2d2d;
-  --text-2:     rgba(45, 45, 45, 0.68);
-  --muted:      #a8a196;
+  --text-2:     #4a453e;                 /* solid, not translucent — Patrick Hand's thin strokes need the extra contrast (~8.5:1) */
+  --muted:      #6b6459;                 /* darkened from a near-invisible tan (~2:1) to ~5.3:1 for hints/placeholders */
   --grid:       #e5e0d8;
   --line:       #2d2d2d;
   --border:     #2d2d2d;
@@ -1268,12 +1268,45 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2
    Colors/fonts come from the token block above; this section only
    touches structure that isn't var()-driven.
    ============================================================ */
-[data-theme="handdrawn"] body { letter-spacing: normal; }
+/* Legibility pass: Patrick Hand's thin, narrow strokes read smaller and
+   fuzzier than a same-sized geometric sans, especially at the app's base
+   14.5px. Bump the base size, loosen line-height, and synthesize bold
+   (Patrick Hand ships no 700 weight, so font-weight:700 fake-bolds it in
+   every browser) on the small/dense UI text that was hardest to read —
+   labels, hints, table cells, badges, nav, buttons. Headings already use
+   the thicker marker-style Kalam and are unaffected. */
+[data-theme="handdrawn"] body { letter-spacing: normal; font-size: 15.5px; line-height: 1.65; }
 [data-theme="handdrawn"] body::before {
   background-image: radial-gradient(var(--grid) 1.5px, transparent 1.5px);
   background-size: 24px 24px;
 }
 [data-theme="handdrawn"] body::after { display: none; }
+
+[data-theme="handdrawn"] .field label,
+[data-theme="handdrawn"] .field-hint,
+[data-theme="handdrawn"] .field-error,
+[data-theme="handdrawn"] .stat-label,
+[data-theme="handdrawn"] .stat-sub,
+[data-theme="handdrawn"] .cell-muted,
+[data-theme="handdrawn"] .legend-name,
+[data-theme="handdrawn"] .legend-val,
+[data-theme="handdrawn"] .legend-pct,
+[data-theme="handdrawn"] .pagination-info,
+[data-theme="handdrawn"] .section-head .sub,
+[data-theme="handdrawn"] .panel .panel-sub,
+[data-theme="handdrawn"] .nav-group-label,
+[data-theme="handdrawn"] .badge,
+[data-theme="handdrawn"] .chip,
+[data-theme="handdrawn"] .toast,
+[data-theme="handdrawn"] table.data th,
+[data-theme="handdrawn"] table.data td,
+[data-theme="handdrawn"] table.data td[data-label]::before {
+  font-weight: 700;
+}
+[data-theme="handdrawn"] .cell-strong { font-weight: 700; color: var(--text-1); }
+[data-theme="handdrawn"] .guide p,
+[data-theme="handdrawn"] .guide li,
+[data-theme="handdrawn"] .guide blockquote { color: var(--text-1); }
 
 [data-theme="handdrawn"] .chamfer,
 [data-theme="handdrawn"] .chamfer-sm,
@@ -1324,7 +1357,7 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2
 
 [data-theme="handdrawn"] .nav-item {
   text-shadow: none;
-  font-weight: 400;
+  font-weight: 700;
   border-left-width: 3px;
   transition: transform 0.1s ease-out, background 0.1s ease-out, color 0.1s ease-out;
 }
@@ -1401,7 +1434,7 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2
   clip-path: none;
   border-radius: var(--wobbly-sm);
   border: 3px solid var(--border);
-  font-weight: 400;
+  font-weight: 700;
   letter-spacing: normal;
   text-transform: none;
   box-shadow: 4px 4px 0 0 var(--border);
