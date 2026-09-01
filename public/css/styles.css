@@ -176,6 +176,58 @@
   --sun:         none;
 }
 
+/* ---------- Tokens: NEUMORPHISM (soft UI, cool-clay monochrome) ---------- */
+:root[data-theme="neumorphism"] {
+  --plane:      #e0e5ec;
+  --surface-1:  #e0e5ec;                 /* cards are molded from the same clay as the page — never white */
+  --surface-2:  #e0e5ec;
+  --sidebar:    #e0e5ec;
+  --text-1:     #3d4852;
+  --text-2:     #6b7280;
+  --muted:      #6b7280;
+  --grid:       transparent;
+  --line:       transparent;
+  --border:     transparent;
+  --border-2:   transparent;
+
+  --accent:     #6c63ff;                 /* soft violet */
+  --accent-2:   #38b2ac;                 /* teal — success / secondary signal */
+  --accent-3:   #8b84ff;                 /* light violet — hover/gradient flourish */
+  --accent-ink: #ffffff;
+
+  --good:       #38b2ac;
+  --good-text:  #2f8f8a;
+  --warning:    #b5860a;
+  --serious:    #c1620a;
+  --critical:   #e0555c;
+
+  --radius:     32px;
+  --radius-sm:  16px;
+  --chamfer:    0px;
+  --chamfer-sm: 0px;
+
+  /* Neumorphic dual shadows — light from the top-left, dark from the
+     bottom-right, both rgba so they blend into the base surface instead of
+     reading as a hard edge. Reused across cards, buttons, inputs, wells. */
+  --neu-shadow:        9px 9px 16px rgba(163, 177, 198, 0.6), -9px -9px 16px rgba(255, 255, 255, 0.5);
+  --neu-shadow-hover:  12px 12px 20px rgba(163, 177, 198, 0.7), -12px -12px 20px rgba(255, 255, 255, 0.6);
+  --neu-shadow-sm:     5px 5px 10px rgba(163, 177, 198, 0.6), -5px -5px 10px rgba(255, 255, 255, 0.5);
+  --neu-inset:         inset 6px 6px 10px rgba(163, 177, 198, 0.6), inset -6px -6px 10px rgba(255, 255, 255, 0.5);
+  --neu-inset-deep:    inset 10px 10px 20px rgba(163, 177, 198, 0.7), inset -10px -10px 20px rgba(255, 255, 255, 0.6);
+  --neu-inset-sm:      inset 3px 3px 6px rgba(163, 177, 198, 0.6), inset -3px -3px 6px rgba(255, 255, 255, 0.5);
+
+  --glow-accent:    none;
+  --glow-accent-2:  none;
+  --shadow:     var(--neu-shadow);
+
+  --font-head:  "Plus Jakarta Sans", system-ui, sans-serif;
+  --font:       "DM Sans", system-ui, sans-serif;
+
+  --scanline-op: 0;
+  --grid-op:     0;
+  --sun:         none;
+}
+
 /* Chamfered "cut corner" panels — the tech-schematic signature that
    replaces border-radius everywhere. Border-top accent stripes still
    read correctly since clip-path cuts the whole box uniformly. */
@@ -288,7 +340,7 @@ body::after {
   display: flex; flex-direction: column;
   padding: 20px 14px;
   position: sticky; top: 0; height: 100vh;
-  overflow-y: auto;
+  overflow-y: auto; overflow-x: hidden;
 }
 .brand { display: flex; align-items: center; gap: 12px; padding: 6px 8px 22px; }
 .brand-mark {
@@ -344,8 +396,30 @@ body::after {
 }
 .bottom-nav-item .nav-badge { position: absolute; top: 5px; left: 50%; transform: translateX(6px); margin: 0; }
 
-.sidebar-footer { display: flex; gap: 6px; padding-top: 16px; border-top: 1px solid var(--border-2); }
-.sidebar-footer .btn { flex: 1; }
+/* Grid, not flex-row: four labelled buttons ("◐ Theme", "▓ Effects", "⚙ Data",
+   "⏻ Log out") never fit one row at the sidebar's fixed 256px width — flex:1
+   with the default min-width:auto floors each button at its content width,
+   pushing the row wider than its container and leaving the overflow
+   unreachable/unclickable off to the side. A 2x2 grid with min-width:0 lets
+   every button shrink and wrap instead of spilling out. */
+.sidebar-footer {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-2);
+}
+.sidebar-footer .btn {
+  min-width: 0;
+  min-height: 44px;
+  width: 100%;
+  justify-content: center;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.2;
+  padding: 8px 6px;
+  font-size: 11.5px;
+}
 
 .main { display: flex; flex-direction: column; min-width: 0; }
 .topbar {
@@ -1490,3 +1564,271 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2
   box-shadow: 3px 3px 0 0 var(--border);
 }
 [data-theme="handdrawn"] .bottom-nav { border-top: 3px dashed var(--border); }
+
+/* ============================================================
+   NEUMORPHISM THEME — soft UI, molded-from-one-surface overrides
+   No borders, no flat/white cards, no gradients on the root. Depth
+   comes entirely from the dual rgba shadow pairs above: extruded
+   (raised) for resting elements, inset (pressed) for wells, inputs,
+   and active states. Colors/fonts come from the token block above;
+   this section only touches structure that isn't var()-driven.
+   ============================================================ */
+[data-theme="neumorphism"] body::after { display: none; }
+
+[data-theme="neumorphism"] .chamfer,
+[data-theme="neumorphism"] .chamfer-sm,
+[data-theme="neumorphism"] .card,
+[data-theme="neumorphism"] .stat,
+[data-theme="neumorphism"] .panel,
+[data-theme="neumorphism"] .table-wrap,
+[data-theme="neumorphism"] .modal,
+[data-theme="neumorphism"] .toast {
+  clip-path: none;
+}
+
+[data-theme="neumorphism"] .glitch-text,
+[data-theme="neumorphism"] .brand-text strong,
+[data-theme="neumorphism"] .view-title {
+  animation: none !important;
+  text-shadow: none !important;
+}
+[data-theme="neumorphism"] .view-title { text-transform: none; font-weight: 800; letter-spacing: -0.01em; }
+[data-theme="neumorphism"] .view-title::before { content: ""; }
+[data-theme="neumorphism"] .brand-text small { color: var(--accent-2); text-transform: none; letter-spacing: 0.02em; }
+
+[data-theme="neumorphism"] .brand-mark {
+  clip-path: none;
+  border-radius: 9999px;
+  box-shadow: var(--neu-shadow-sm);
+}
+
+[data-theme="neumorphism"] .sidebar {
+  background: var(--plane);
+  backdrop-filter: none;
+  border-right: none;
+  box-shadow: 8px 0 24px rgba(163, 177, 198, 0.35);
+}
+[data-theme="neumorphism"] .sidebar.open { box-shadow: 12px 0 32px rgba(163, 177, 198, 0.4); }
+[data-theme="neumorphism"] .topbar {
+  backdrop-filter: none;
+  background: var(--plane);
+  border-bottom: none;
+  box-shadow: 0 8px 20px rgba(163, 177, 198, 0.25);
+}
+
+[data-theme="neumorphism"] .nav-item {
+  text-shadow: none;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  border-left: none;
+  border-radius: 16px;
+  margin: 2px 0;
+  transition: box-shadow 0.3s ease-out, transform 0.2s ease-out, color 0.2s ease-out;
+}
+[data-theme="neumorphism"] .nav-item:hover {
+  background: transparent;
+  border-left-color: transparent;
+  color: var(--accent);
+  text-shadow: none;
+  box-shadow: var(--neu-shadow-sm);
+  transform: translateY(-1px);
+}
+[data-theme="neumorphism"] .nav-item[aria-current="true"] {
+  background: transparent;
+  border-left-color: transparent;
+  color: var(--accent);
+  text-shadow: none;
+  box-shadow: var(--neu-inset);
+}
+[data-theme="neumorphism"] .nav-item[aria-current="true"] .nav-ico { color: var(--accent); opacity: 1; }
+
+/* Cards/stats/panels/tables: same-surface clay, no border, extruded shadow
+   (var(--shadow) already resolves to --neu-shadow from the token block). */
+[data-theme="neumorphism"] .card,
+[data-theme="neumorphism"] .stat,
+[data-theme="neumorphism"] .panel,
+[data-theme="neumorphism"] .table-wrap {
+  background: var(--plane);
+  backdrop-filter: none;
+  border: none;
+  border-radius: 32px;
+}
+[data-theme="neumorphism"] .card:hover,
+[data-theme="neumorphism"] .stat:hover,
+[data-theme="neumorphism"] .account-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--neu-shadow-hover);
+}
+[data-theme="neumorphism"] .account-card.selected { box-shadow: var(--neu-inset); }
+[data-theme="neumorphism"] .section-head h2,
+[data-theme="neumorphism"] .panel h3,
+[data-theme="neumorphism"] .empty h3 {
+  text-shadow: none;
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: normal;
+  text-transform: none;
+}
+[data-theme="neumorphism"] .stat-value { text-shadow: none; font-weight: 700; }
+[data-theme="neumorphism"] .stat-sub.pos,
+[data-theme="neumorphism"] .stat-sub.neg { text-shadow: none; }
+
+/* Buttons: extruded resting state, lifts on hover, presses into an inset well on click */
+[data-theme="neumorphism"] .btn {
+  clip-path: none;
+  border-radius: 16px;
+  border: none;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  box-shadow: var(--neu-shadow-sm);
+  transition: transform 0.3s ease-out, box-shadow 0.3s ease-out, background 0.3s ease-out, color 0.3s ease-out;
+}
+[data-theme="neumorphism"] .btn:hover {
+  border-color: transparent;
+  color: var(--accent);
+  text-shadow: none;
+  box-shadow: var(--neu-shadow-hover);
+  transform: translateY(-1px);
+}
+[data-theme="neumorphism"] .btn:active {
+  transform: translateY(1px);
+  box-shadow: var(--neu-inset-sm);
+}
+[data-theme="neumorphism"] .btn-primary { background: var(--accent); color: #fff; box-shadow: var(--neu-shadow-sm); }
+[data-theme="neumorphism"] .btn-primary::before { content: none; }
+[data-theme="neumorphism"] .btn-primary:hover { background: var(--accent-3); filter: none; color: #fff; box-shadow: var(--neu-shadow-hover); }
+[data-theme="neumorphism"] .btn-primary:active { box-shadow: inset 6px 6px 10px rgba(0, 0, 0, 0.25), inset -6px -6px 10px rgba(255, 255, 255, 0.15); }
+[data-theme="neumorphism"] .btn-ghost { border-color: transparent; box-shadow: none; background: transparent; }
+[data-theme="neumorphism"] .btn-ghost:hover {
+  border-color: transparent;
+  background: transparent;
+  color: var(--accent);
+  box-shadow: var(--neu-shadow-sm);
+  transform: translateY(-1px);
+}
+[data-theme="neumorphism"] .btn-danger { border-color: transparent; color: var(--critical); box-shadow: var(--neu-shadow-sm); }
+[data-theme="neumorphism"] .btn-danger:hover { background: var(--critical); color: #fff; box-shadow: var(--neu-shadow-hover); text-shadow: none; }
+
+/* Inputs: carved-in wells, deeper inset + accent ring on focus (no glow, no border) */
+[data-theme="neumorphism"] .input,
+[data-theme="neumorphism"] select.input,
+[data-theme="neumorphism"] textarea.input {
+  clip-path: none;
+  border-radius: 16px;
+  border: none;
+  background: var(--plane);
+  box-shadow: var(--neu-inset);
+  font-weight: 400;
+}
+[data-theme="neumorphism"] .input:focus {
+  border-color: transparent;
+  outline: none;
+  box-shadow: var(--neu-inset-deep), 0 0 0 2px var(--plane), 0 0 0 4px var(--accent);
+}
+[data-theme="neumorphism"] .input[aria-invalid="true"] { border-color: transparent; box-shadow: var(--neu-inset), 0 0 0 2px var(--critical); }
+[data-theme="neumorphism"] .input[aria-invalid="true"]:focus { box-shadow: var(--neu-inset-deep), 0 0 0 2px var(--critical); }
+
+/* Badges: resting tag is a shallow well; colored variants are small extruded chips */
+[data-theme="neumorphism"] .badge { border: none; border-radius: 9999px; box-shadow: var(--neu-inset-sm); font-weight: 500; }
+[data-theme="neumorphism"] .badge.accent { background: var(--accent); color: #fff; box-shadow: var(--neu-shadow-sm); }
+[data-theme="neumorphism"] .badge.good { background: var(--good); color: #fff; box-shadow: var(--neu-shadow-sm); }
+[data-theme="neumorphism"] .badge.warn { background: var(--warning); color: #fff; box-shadow: var(--neu-shadow-sm); }
+[data-theme="neumorphism"] .badge.crit { background: var(--critical); color: #fff; box-shadow: var(--neu-shadow-sm); }
+
+/* Progress: inset track, flat colored fill */
+[data-theme="neumorphism"] .progress { border-radius: 9999px; border: none; background: var(--plane); box-shadow: var(--neu-inset-sm); height: 10px; }
+[data-theme="neumorphism"] .progress > span,
+[data-theme="neumorphism"] .progress.good > span { background: var(--accent); box-shadow: none; border-radius: 9999px; }
+[data-theme="neumorphism"] .progress.good > span { background: var(--good); }
+
+/* Charts */
+[data-theme="neumorphism"] .chart svg { filter: none; }
+[data-theme="neumorphism"] .legend-swatch,
+[data-theme="neumorphism"] .stat .dot { box-shadow: none; border: none; border-radius: 9999px; }
+[data-theme="neumorphism"] .bar-track { fill: rgba(163, 177, 198, 0.25); }
+
+/* Modal: soft raised panel; the terminal-style three-dot chrome doesn't fit
+   soft-UI, so it's hidden rather than recolored. */
+[data-theme="neumorphism"] .modal {
+  background: var(--plane);
+  border: none;
+  border-radius: 32px;
+  box-shadow: var(--neu-shadow-hover);
+}
+[data-theme="neumorphism"] .modal-backdrop { background: rgba(61, 72, 82, 0.35); backdrop-filter: blur(6px); }
+[data-theme="neumorphism"] .modal-head {
+  background: transparent;
+  border-bottom: none;
+  box-shadow: inset 0 -6px 10px -6px rgba(163, 177, 198, 0.4);
+  padding-left: 20px;
+}
+[data-theme="neumorphism"] .modal-head::before { display: none; }
+[data-theme="neumorphism"] .modal-head h2 { text-shadow: none; color: var(--text-1); }
+[data-theme="neumorphism"] .calc-preview {
+  background: var(--plane);
+  border: none;
+  border-left: none;
+  border-radius: 16px;
+  box-shadow: var(--neu-inset);
+}
+[data-theme="neumorphism"] .calc-preview .row strong { color: var(--accent); }
+
+/* Chips: extruded pills, dim inset when toggled off */
+[data-theme="neumorphism"] .chip {
+  clip-path: none;
+  border-radius: 9999px;
+  border: none;
+  background: var(--plane);
+  box-shadow: var(--neu-shadow-sm);
+  font-weight: 500;
+}
+[data-theme="neumorphism"] .chip:hover { color: var(--accent); border-color: transparent; box-shadow: var(--neu-shadow-hover); transform: translateY(-1px); }
+[data-theme="neumorphism"] .chip-toggle { opacity: 1; }
+[data-theme="neumorphism"] .chip-toggle:not(.on) { opacity: 0.6; box-shadow: var(--neu-inset-sm); }
+[data-theme="neumorphism"] .chip-toggle.on { color: #fff; background: var(--accent); border-color: transparent; box-shadow: var(--neu-shadow-sm); }
+
+/* Tables */
+[data-theme="neumorphism"] table.data th { background: transparent; color: var(--text-2); font-weight: 600; }
+[data-theme="neumorphism"] table.data th,
+[data-theme="neumorphism"] table.data td { border-bottom: 1px solid rgba(163, 177, 198, 0.35); }
+[data-theme="neumorphism"] table.data tr:hover td { background: rgba(163, 177, 198, 0.12); }
+[data-theme="neumorphism"] table.data td[data-label]::before { color: var(--accent); }
+@media (max-width: 900px) {
+  [data-theme="neumorphism"] table.data tr { border: none; border-radius: 16px; box-shadow: var(--neu-shadow-sm); }
+}
+
+/* Toast */
+[data-theme="neumorphism"] .toast {
+  background: var(--plane);
+  border: none;
+  border-left: none;
+  border-radius: 16px;
+  box-shadow: var(--neu-shadow-hover);
+}
+[data-theme="neumorphism"] .toast-action {
+  clip-path: none;
+  border-radius: 9999px;
+  border: none;
+  background: var(--plane);
+  color: var(--accent);
+  box-shadow: var(--neu-shadow-sm);
+}
+[data-theme="neumorphism"] .toast-action:hover { background: var(--plane); box-shadow: var(--neu-shadow-hover); }
+
+/* Mobile FAB / bottom-nav "+" */
+[data-theme="neumorphism"] .fab,
+[data-theme="neumorphism"] .bottom-nav-log-plus {
+  clip-path: none;
+  border-radius: 9999px;
+  border: none;
+  background: var(--accent);
+  box-shadow: var(--neu-shadow-hover);
+}
+[data-theme="neumorphism"] .bottom-nav {
+  border-top: none;
+  background: var(--plane);
+  box-shadow: 0 -8px 20px rgba(163, 177, 198, 0.3);
+}
+[data-theme="neumorphism"] .bottom-nav-item[aria-current="true"] { color: var(--accent); }

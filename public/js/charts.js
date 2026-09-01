@@ -5,13 +5,14 @@ import { money, moneyCompact, pct, escapeHtml, dateLabel } from './format.js';
 // Categorical palette (validated order). Light stays print-safe; dark goes neon.
 // Index 1 (income) and 5 (expenses) are kept high-contrast — see compareBars callers.
 const PALETTE = {
-  light:     ['#2a78d6', '#008300', '#e87ba4', '#eda100', '#1baf7a', '#eb6834', '#4a3aa7', '#e34948'],
-  dark:      ['#00ffff', '#00ff9f', '#ff00ff', '#ffcf1a', '#b47bff', '#ff6a3d', '#5ad1ff', '#ff4d6d'],
-  bauhaus:   ['#D02020', '#1040C0', '#F0C020', '#121212', '#8a3a10', '#1a6b3a', '#6a1ba8', '#c05a00'],
-  handdrawn: ['#ff4d4d', '#2d5da1', '#2d2d2d', '#c9a227', '#3f7d4f', '#a15d2d', '#7a4fa1', '#c0567a'],
+  light:       ['#2a78d6', '#008300', '#e87ba4', '#eda100', '#1baf7a', '#eb6834', '#4a3aa7', '#e34948'],
+  dark:        ['#00ffff', '#00ff9f', '#ff00ff', '#ffcf1a', '#b47bff', '#ff6a3d', '#5ad1ff', '#ff4d6d'],
+  bauhaus:     ['#D02020', '#1040C0', '#F0C020', '#121212', '#8a3a10', '#1a6b3a', '#6a1ba8', '#c05a00'],
+  handdrawn:   ['#ff4d4d', '#2d5da1', '#2d2d2d', '#c9a227', '#3f7d4f', '#a15d2d', '#7a4fa1', '#c0567a'],
+  neumorphism: ['#6C63FF', '#38B2AC', '#8B84FF', '#3D4852', '#4a9dd6', '#c17ed6', '#6bb894', '#e08a5c'],
 };
 
-const THEMES = new Set(['light', 'bauhaus', 'handdrawn']);
+const THEMES = new Set(['light', 'bauhaus', 'handdrawn', 'neumorphism']);
 function theme() {
   const t = document.documentElement.dataset.theme;
   return THEMES.has(t) ? t : 'dark';
@@ -20,7 +21,8 @@ export function seriesColor(i) {
   const p = PALETTE[theme()];
   return p[i % p.length];
 }
-function surface() { return theme() === 'dark' ? '#1a1a19' : '#fcfcfb'; }
+const SURFACE = { dark: '#1a1a19', light: '#fcfcfb', bauhaus: '#ffffff', handdrawn: '#ffffff', neumorphism: '#e0e5ec' };
+function surface() { return SURFACE[theme()]; }
 
 /**
  * Donut chart with legend. `items` = [{ category, amount }] (already sorted desc).
