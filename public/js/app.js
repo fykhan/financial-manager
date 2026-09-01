@@ -101,8 +101,8 @@ function navigate(view) {
 }
 
 // ---------- theme ----------
-const THEME_ORDER = ['dark', 'light', 'bauhaus', 'handdrawn', 'neumorphism'];
-const THEME_COLOR = { dark: '#0a0a0f', light: '#f2f4f3', bauhaus: '#f0f0f0', handdrawn: '#fdfbf7', neumorphism: '#e0e5ec' };
+const THEME_ORDER = ['dark', 'light', 'bauhaus', 'handdrawn', 'neumorphism', 'maximalism'];
+const THEME_COLOR = { dark: '#0a0a0f', light: '#f2f4f3', bauhaus: '#f0f0f0', handdrawn: '#fdfbf7', neumorphism: '#e0e5ec', maximalism: '#0d0d1a' };
 function applyTheme(mode) {
   document.documentElement.dataset.theme = mode;
   localStorage.setItem('gradplan.theme', mode);

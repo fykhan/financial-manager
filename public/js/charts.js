@@ -10,9 +10,10 @@ const PALETTE = {
   bauhaus:     ['#D02020', '#1040C0', '#F0C020', '#121212', '#8a3a10', '#1a6b3a', '#6a1ba8', '#c05a00'],
   handdrawn:   ['#ff4d4d', '#2d5da1', '#2d2d2d', '#c9a227', '#3f7d4f', '#a15d2d', '#7a4fa1', '#c0567a'],
   neumorphism: ['#6C63FF', '#38B2AC', '#8B84FF', '#3D4852', '#4a9dd6', '#c17ed6', '#6bb894', '#e08a5c'],
+  maximalism: ['#FF3AF2', '#00F5D4', '#FFE600', '#FF6B35', '#7B2FFF', '#FF3B5C', '#5AF06B', '#38B2FF'],
 };
 
-const THEMES = new Set(['light', 'bauhaus', 'handdrawn', 'neumorphism']);
+const THEMES = new Set(['light', 'bauhaus', 'handdrawn', 'neumorphism', 'maximalism']);
 function theme() {
   const t = document.documentElement.dataset.theme;
   return THEMES.has(t) ? t : 'dark';
@@ -21,7 +22,7 @@ export function seriesColor(i) {
   const p = PALETTE[theme()];
   return p[i % p.length];
 }
-const SURFACE = { dark: '#1a1a19', light: '#fcfcfb', bauhaus: '#ffffff', handdrawn: '#ffffff', neumorphism: '#e0e5ec' };
+const SURFACE = { dark: '#1a1a19', light: '#fcfcfb', bauhaus: '#ffffff', handdrawn: '#ffffff', neumorphism: '#e0e5ec', maximalism: '#2d1b4e' };
 function surface() { return SURFACE[theme()]; }
 
 /**

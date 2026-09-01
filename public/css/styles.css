@@ -228,6 +228,60 @@
   --sun:         none;
 }
 
+/* ---------- Tokens: MAXIMALISM / DOPAMINE (Y2K hyperpop, more-is-more) ---------- */
+:root[data-theme="maximalism"] {
+  --plane:      #0d0d1a;                 /* cosmic void the neon pops out of */
+  --surface-1:  rgba(45, 27, 78, 0.82);  /* glass cards */
+  --surface-2:  #2d1b4e;                 /* raised inputs */
+  --sidebar:    rgba(13, 13, 26, 0.92);
+  --text-1:     #ffffff;
+  --text-2:     rgba(255, 255, 255, 0.78);
+  --muted:      rgba(255, 255, 255, 0.58);
+  --grid:       #2d1b4e;
+  --line:       #2d1b4e;
+  --border:     rgba(255, 58, 242, 0.55);
+  --border-2:   #ffe600;                 /* clashing yellow — never matches the fill it outlines */
+
+  --accent:     #ff3af2;                 /* 1. magenta */
+  --accent-2:   #00f5d4;                 /* 2. cyan */
+  --accent-3:   #ffe600;                 /* 3. yellow */
+  --accent-4:   #ff6b35;                 /* 4. orange — rotation-only, no shared component reads this */
+  --accent-5:   #7b2fff;                 /* 5. purple — rotation-only */
+  --accent-ink: #0d0d1a;                 /* every neon accent here is too light for white text */
+
+  --good:       #00f5d4;
+  --good-text:  #00f5d4;
+  --warning:    #ffe600;
+  --serious:    #ff6b35;
+  --critical:   #ff3b5c;
+
+  --radius:     24px;
+  --radius-sm:  16px;
+  --chamfer:    0px;
+  --chamfer-sm: 0px;
+
+  /* Glow (soft, colored) + hard (offset, flat, stacked) shadows — the two
+     shadow families this theme layers together. */
+  --glow:       0 0 20px rgba(255, 58, 242, 0.5), 0 0 40px rgba(0, 245, 212, 0.3);
+  --glow-lg:    0 0 40px rgba(255, 58, 242, 0.6), 0 0 80px rgba(255, 230, 0, 0.4), 0 0 120px rgba(123, 47, 255, 0.3);
+  --hard-2:     8px 8px 0 0 var(--accent-3), 16px 16px 0 0 var(--accent);
+  --hard-3:     12px 12px 0 0 var(--accent-2), 24px 24px 0 0 var(--accent), 36px 36px 0 0 var(--accent-3);
+
+  --glow-accent:    var(--glow);
+  --glow-accent-2:  0 0 16px rgba(0, 245, 212, 0.4);
+  --shadow:     var(--hard-2);
+
+  --font-head:  "Unbounded", "Outfit", system-ui, sans-serif;
+  --font:       "DM Sans", system-ui, sans-serif;
+
+  --scanline-op: 0.5;
+  --grid-op:     0.35;
+  --sun:
+    radial-gradient(ellipse at 20% 25%, rgba(255, 58, 242, 0.18) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(0, 245, 212, 0.16) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(123, 47, 255, 0.15) 0%, transparent 60%);
+}
+
 /* Chamfered "cut corner" panels — the tech-schematic signature that
    replaces border-radius everywhere. Border-top accent stripes still
    read correctly since clip-path cuts the whole box uniformly. */
@@ -1865,3 +1919,299 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2
   box-shadow: 0 -8px 20px rgba(163, 177, 198, 0.3);
 }
 [data-theme="neumorphism"] .bottom-nav-item[aria-current="true"] { color: var(--accent); }
+
+/* ============================================================
+   MAXIMALISM / DOPAMINE THEME — Y2K hyperpop, more-is-more
+   Five rotating neon accents, clashing (never matching) borders,
+   stacked hard shadows + soft glow, gradient/shadowed display type,
+   layered background patterns. Colors/fonts/shadows come from the
+   token block above; this section wires them into components and
+   supplies the keyframes the tokens don't carry on their own.
+   Every animation here is already covered by the global
+   prefers-reduced-motion rule (it zeroes all animation-durations).
+   ============================================================ */
+@keyframes max-pulse-glow {
+  0%, 100% { box-shadow: var(--glow), var(--hard-2); }
+  50%      { box-shadow: var(--glow-lg), var(--hard-2); }
+}
+@keyframes max-gradient-shift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes max-wiggle {
+  0%, 100% { transform: rotate(-3deg); }
+  50%      { transform: rotate(3deg); }
+}
+
+[data-theme="maximalism"] body { letter-spacing: normal; }
+/* Two layered patterns on the base surface, per the "never an empty
+   background" rule — a magenta dot grid (body::before) under a faint
+   yellow diagonal-stripe wash (body::after), both non-interactive. */
+[data-theme="maximalism"] body::before {
+  background-image: radial-gradient(var(--accent) 1.5px, transparent 1.5px);
+  background-size: 28px 28px;
+}
+[data-theme="maximalism"] body::after {
+  background-image: repeating-linear-gradient(
+    45deg, transparent, transparent 10px,
+    rgba(255, 230, 0, 0.06) 10px, rgba(255, 230, 0, 0.06) 20px
+  );
+  background-size: auto;
+  mix-blend-mode: screen;
+}
+
+[data-theme="maximalism"] .chamfer,
+[data-theme="maximalism"] .chamfer-sm,
+[data-theme="maximalism"] .card,
+[data-theme="maximalism"] .stat,
+[data-theme="maximalism"] .panel,
+[data-theme="maximalism"] .table-wrap,
+[data-theme="maximalism"] .modal,
+[data-theme="maximalism"] .toast {
+  clip-path: none;
+}
+
+[data-theme="maximalism"] .glitch-text { animation: none !important; }
+[data-theme="maximalism"] .brand-text strong {
+  animation: none !important;
+  text-shadow: 2px 2px 0 var(--accent-5), 4px 4px 0 var(--accent) !important;
+  text-transform: uppercase;
+}
+[data-theme="maximalism"] .brand-text small { color: var(--accent-2); text-transform: uppercase; letter-spacing: 0.14em; }
+[data-theme="maximalism"] .view-title {
+  animation: none !important;
+  text-transform: uppercase;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  text-shadow: 2px 2px 0 var(--accent-5), 4px 4px 0 var(--accent), 6px 6px 0 var(--accent-2) !important;
+}
+[data-theme="maximalism"] .view-title::before { content: ""; }
+
+[data-theme="maximalism"] .brand-mark {
+  clip-path: none;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-5), var(--accent-2));
+  border: 3px solid var(--border-2);
+  box-shadow: var(--glow);
+  color: var(--accent-ink);
+}
+
+[data-theme="maximalism"] .sidebar {
+  backdrop-filter: blur(12px);
+  border-right: 4px solid var(--border-2);
+  box-shadow: var(--glow-accent-2);
+}
+[data-theme="maximalism"] .sidebar.open { box-shadow: var(--glow-lg); }
+[data-theme="maximalism"] .topbar {
+  backdrop-filter: blur(12px);
+  border-bottom: 4px dashed var(--accent-2);
+  box-shadow: 0 1px 0 rgba(255, 58, 242, 0.25);
+}
+
+[data-theme="maximalism"] .nav-item {
+  text-shadow: none;
+  font-weight: 700;
+  border-left-width: 4px;
+  border-radius: 0 9999px 9999px 0;
+  margin: 2px 0;
+}
+[data-theme="maximalism"] .nav-item:hover {
+  background: rgba(0, 245, 212, 0.12);
+  border-left-color: var(--accent-2);
+  color: var(--accent-2);
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.4);
+}
+[data-theme="maximalism"] .nav-item[aria-current="true"] {
+  background: var(--accent);
+  border-left-color: var(--accent-3);
+  color: var(--accent-ink);
+  text-shadow: none;
+  font-weight: 800;
+}
+[data-theme="maximalism"] .nav-item[aria-current="true"] .nav-ico { color: var(--accent-ink); opacity: 1; }
+
+/* Cards/stats/panels/tables: glass surface, thick clashing border rotated
+   across the five accents (nth-of-type mod 5), stacked hard shadow. */
+[data-theme="maximalism"] .card,
+[data-theme="maximalism"] .stat,
+[data-theme="maximalism"] .panel,
+[data-theme="maximalism"] .table-wrap {
+  border: 4px solid var(--accent);
+  border-top: 4px solid var(--accent);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+  transition: transform 0.25s ease-out, box-shadow 0.25s ease-out;
+}
+[data-theme="maximalism"] .card:nth-of-type(5n+2), [data-theme="maximalism"] .stat:nth-of-type(5n+2) { border-color: var(--accent-2); }
+[data-theme="maximalism"] .card:nth-of-type(5n+3), [data-theme="maximalism"] .stat:nth-of-type(5n+3) { border-color: var(--accent-3); }
+[data-theme="maximalism"] .card:nth-of-type(5n+4), [data-theme="maximalism"] .stat:nth-of-type(5n+4) { border-color: var(--accent-4); }
+[data-theme="maximalism"] .card:nth-of-type(5n+5), [data-theme="maximalism"] .stat:nth-of-type(5n+5) { border-color: var(--accent-5); }
+[data-theme="maximalism"] .card:hover,
+[data-theme="maximalism"] .stat:hover,
+[data-theme="maximalism"] .account-card:hover {
+  transform: translateY(-3px) scale(1.015);
+  box-shadow: var(--hard-3);
+}
+[data-theme="maximalism"] .account-card.selected { border-color: var(--accent-3); box-shadow: var(--glow), var(--hard-2); }
+[data-theme="maximalism"] .section-head h2,
+[data-theme="maximalism"] .panel h3,
+[data-theme="maximalism"] .empty h3 {
+  text-shadow: none;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2), var(--accent-3), var(--accent));
+  background-size: 250% auto;
+  background-clip: text; -webkit-background-clip: text;
+  color: var(--accent-2);
+  -webkit-text-fill-color: transparent;
+  animation: max-gradient-shift 5s ease infinite;
+}
+[data-theme="maximalism"] .empty .empty-ico { animation: max-wiggle 1.4s ease-in-out infinite; }
+[data-theme="maximalism"] .stat-value { text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5); font-weight: 800; }
+[data-theme="maximalism"] .stat-sub.pos,
+[data-theme="maximalism"] .stat-sub.neg { text-shadow: none; font-weight: 700; }
+
+/* Buttons: gradient fill, clashing border, glow + hard shadow, bouncy hover/active */
+[data-theme="maximalism"] .btn {
+  clip-path: none;
+  border-radius: 9999px;
+  border: 4px solid var(--border-2);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  box-shadow: var(--hard-2);
+  transition: transform 0.2s cubic-bezier(0.68, -0.55, 0.265, 1.55), box-shadow 0.2s ease-out;
+}
+[data-theme="maximalism"] .btn:hover {
+  border-color: var(--accent-2);
+  color: var(--text-1);
+  text-shadow: none;
+  box-shadow: var(--glow), var(--hard-2);
+  transform: scale(1.06);
+}
+[data-theme="maximalism"] .btn:active { transform: scale(0.95); box-shadow: none; }
+[data-theme="maximalism"] .btn-primary {
+  background: linear-gradient(90deg, var(--accent), var(--accent-5), var(--accent-2));
+  background-size: 220% auto;
+  color: var(--accent-ink);
+  animation: max-pulse-glow 2.4s ease-in-out infinite;
+}
+[data-theme="maximalism"] .btn-primary::before { content: none; }
+[data-theme="maximalism"] .btn-primary:hover { background-position: 100% 50%; filter: none; color: var(--accent-ink); }
+[data-theme="maximalism"] .btn-ghost { border-color: transparent; border-style: dashed; box-shadow: none; color: var(--text-2); }
+[data-theme="maximalism"] .btn-ghost:hover {
+  border-color: var(--accent-2);
+  background: rgba(0, 245, 212, 0.12);
+  color: var(--accent-2);
+  box-shadow: none;
+  transform: scale(1.05);
+}
+[data-theme="maximalism"] .btn-danger { border-color: var(--critical); color: var(--critical); box-shadow: var(--hard-2); }
+[data-theme="maximalism"] .btn-danger:hover {
+  background: var(--critical);
+  color: var(--accent-ink);
+  border-color: var(--accent-3);
+  box-shadow: 0 0 20px rgba(255, 59, 92, 0.6), var(--hard-2);
+  text-shadow: none;
+}
+
+/* Inputs: thick clashing border, pill for single-line, double-ring focus */
+[data-theme="maximalism"] .input,
+[data-theme="maximalism"] select.input {
+  clip-path: none;
+  border-radius: 9999px;
+  border: 4px solid var(--accent-2);
+  border-bottom-width: 4px;
+  font-weight: 700;
+}
+[data-theme="maximalism"] textarea.input { clip-path: none; border-radius: 24px; border: 4px solid var(--accent-2); }
+[data-theme="maximalism"] .input:focus {
+  border-color: var(--accent);
+  border-bottom-color: var(--accent);
+  box-shadow: 0 0 0 4px var(--plane), 0 0 0 8px var(--accent-3);
+}
+[data-theme="maximalism"] .input[aria-invalid="true"] { border-color: var(--critical); border-bottom-color: var(--critical); }
+[data-theme="maximalism"] .input[aria-invalid="true"]:focus { box-shadow: 0 0 0 4px var(--plane), 0 0 0 8px var(--critical); }
+
+/* Badges: solid neon fill, dark ink (every accent here fails white-on-fill AA) */
+[data-theme="maximalism"] .badge { border: 2px dashed var(--border-2); border-radius: 9999px; box-shadow: none; font-weight: 700; }
+[data-theme="maximalism"] .badge.accent { background: var(--accent); color: var(--accent-ink); border-style: solid; border-color: var(--accent-3); box-shadow: none; }
+[data-theme="maximalism"] .badge.good { background: var(--good); color: var(--accent-ink); border-style: solid; border-color: var(--accent); box-shadow: none; }
+[data-theme="maximalism"] .badge.warn { background: var(--warning); color: var(--accent-ink); border-style: solid; border-color: var(--accent-5); box-shadow: none; }
+[data-theme="maximalism"] .badge.crit { background: var(--critical); color: var(--accent-ink); border-style: solid; border-color: var(--accent-3); box-shadow: none; }
+
+/* Progress: chunky animated gradient fill */
+[data-theme="maximalism"] .progress { border-radius: 9999px; border: 2px solid var(--border-2); background: var(--surface-2); height: 10px; }
+[data-theme="maximalism"] .progress > span {
+  background: linear-gradient(90deg, var(--accent), var(--accent-5), var(--accent-2), var(--accent));
+  background-size: 250% auto;
+  box-shadow: none;
+  animation: max-gradient-shift 3s ease infinite;
+}
+[data-theme="maximalism"] .progress.good > span { background: linear-gradient(90deg, var(--accent-2), var(--good)); }
+
+/* Charts */
+[data-theme="maximalism"] .chart svg { filter: drop-shadow(0 0 8px rgba(255, 58, 242, 0.4)); }
+[data-theme="maximalism"] .legend-swatch,
+[data-theme="maximalism"] .stat .dot { box-shadow: 0 0 6px currentColor; border: 2px solid var(--border-2); border-radius: 9999px; }
+[data-theme="maximalism"] .bar-track { fill: rgba(255, 255, 255, 0.08); }
+
+/* Modal: the terminal-style three-dot chrome already renders in
+   magenta/cyan/yellow via the token colors — kept as-is, just thickened. */
+[data-theme="maximalism"] .modal { border: 4px solid var(--accent-3); border-radius: 24px; box-shadow: var(--glow-lg), var(--hard-2); }
+[data-theme="maximalism"] .modal-backdrop { background: rgba(13, 13, 26, 0.75); }
+[data-theme="maximalism"] .modal-head {
+  background: linear-gradient(90deg, rgba(255, 58, 242, 0.25), rgba(123, 47, 255, 0.2));
+  border-bottom: 4px dashed var(--accent-2);
+}
+[data-theme="maximalism"] .modal-head h2 { text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.5); text-transform: uppercase; font-weight: 800; }
+[data-theme="maximalism"] .calc-preview {
+  background: rgba(0, 245, 212, 0.08);
+  border: 2px dashed var(--accent-2);
+  border-left: 4px solid var(--accent);
+  border-radius: 16px;
+}
+[data-theme="maximalism"] .calc-preview .row strong { color: var(--accent-2); }
+
+/* Chips: dashed by default (the "mixed border styles" rule), solid + filled when toggled on */
+[data-theme="maximalism"] .chip { clip-path: none; border-radius: 9999px; border: 2px dashed var(--accent-4); font-weight: 700; }
+[data-theme="maximalism"] .chip:hover { border-color: var(--accent-2); color: var(--accent-2); box-shadow: 0 0 10px rgba(0, 245, 212, 0.4); }
+[data-theme="maximalism"] .chip-toggle.on {
+  color: var(--accent-ink);
+  background: var(--accent-3);
+  border-color: var(--accent);
+  border-style: solid;
+  box-shadow: none;
+}
+
+/* Tables */
+[data-theme="maximalism"] table.data th { background: rgba(255, 58, 242, 0.1); color: var(--accent-2); font-weight: 800; }
+[data-theme="maximalism"] table.data tr:hover td { background: rgba(0, 245, 212, 0.08); }
+[data-theme="maximalism"] table.data td[data-label]::before { color: var(--accent-2); }
+@media (max-width: 900px) {
+  [data-theme="maximalism"] table.data tr { border: 3px solid var(--accent); border-radius: 16px; box-shadow: var(--hard-2); }
+}
+
+/* Toast */
+[data-theme="maximalism"] .toast { border: 3px solid var(--accent-3); border-left: 6px solid var(--accent); border-radius: 16px; box-shadow: var(--glow), var(--hard-2); }
+[data-theme="maximalism"] .toast.good { border-left-color: var(--good); box-shadow: 0 0 18px rgba(0, 245, 212, 0.4), var(--hard-2); }
+[data-theme="maximalism"] .toast.err { border-left-color: var(--critical); box-shadow: 0 0 18px rgba(255, 59, 92, 0.4), var(--hard-2); }
+[data-theme="maximalism"] .toast-action {
+  clip-path: none; border-radius: 9999px; border: 2px solid var(--accent-2); color: var(--accent-2);
+}
+[data-theme="maximalism"] .toast-action:hover { background: var(--accent-2); color: var(--accent-ink); }
+
+/* Mobile FAB / bottom-nav "+" — the loudest button on the screen */
+[data-theme="maximalism"] .fab,
+[data-theme="maximalism"] .bottom-nav-log-plus {
+  clip-path: none;
+  border-radius: 9999px;
+  border: 3px solid var(--accent-3);
+  background: linear-gradient(135deg, var(--accent), var(--accent-5), var(--accent-2));
+  box-shadow: var(--glow), var(--hard-2);
+  animation: max-pulse-glow 2.4s ease-in-out infinite;
+}
+[data-theme="maximalism"] .bottom-nav { border-top: 4px dashed var(--accent-2); backdrop-filter: blur(12px); }
+[data-theme="maximalism"] .bottom-nav-item[aria-current="true"] { color: var(--accent); }
