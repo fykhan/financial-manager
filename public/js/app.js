@@ -101,12 +101,16 @@ function navigate(view) {
 }
 
 // ---------- theme ----------
+const THEME_ORDER = ['dark', 'light', 'bauhaus'];
+const THEME_COLOR = { dark: '#0a0a0f', light: '#f2f4f3', bauhaus: '#f0f0f0' };
 function applyTheme(mode) {
   document.documentElement.dataset.theme = mode;
   localStorage.setItem('gradplan.theme', mode);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', THEME_COLOR[mode] || THEME_COLOR.dark);
 }
 function toggleTheme() {
-  applyTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light');
+  const next = THEME_ORDER[(THEME_ORDER.indexOf(document.documentElement.dataset.theme) + 1) % THEME_ORDER.length];
+  applyTheme(next);
   render();
 }
 

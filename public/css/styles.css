@@ -85,6 +85,48 @@
   --sun:         radial-gradient(58% 42% at 50% 6%, rgba(6, 125, 74, 0.08), rgba(196, 0, 196, 0.06) 45%, transparent 72%);
 }
 
+/* ---------- Tokens: BAUHAUS (constructivist, primaries-on-white) ---------- */
+:root[data-theme="bauhaus"] {
+  --plane:      #f0f0f0;
+  --surface-1:  #ffffff;
+  --surface-2:  #ffffff;
+  --sidebar:    #ffffff;
+  --text-1:     #121212;
+  --text-2:     #3a3a3a;
+  --muted:      #5a5a5a;
+  --grid:       #e0e0e0;
+  --line:       #121212;
+  --border:     #121212;
+  --border-2:   #121212;
+
+  --accent:     #d02020;                 /* bauhaus red — primary CTA */
+  --accent-2:   #1040c0;                 /* bauhaus blue — dominant structural signal */
+  --accent-3:   #f0c020;                 /* bauhaus yellow — rare flourish */
+  --accent-ink: #ffffff;
+
+  --good:       #1b6b3a;
+  --good-text:  #155a30;
+  --warning:    #8a6800;
+  --serious:    #a8410a;
+  --critical:   #a8102a;
+
+  --radius:     0px;
+  --radius-sm:  0px;
+  --chamfer:    0px;
+  --chamfer-sm: 0px;
+
+  --glow-accent:    none;
+  --glow-accent-2:  none;
+  --shadow:     6px 6px 0 0 var(--border);
+
+  --font-head:  "Outfit", system-ui, sans-serif;
+  --font:       "Outfit", system-ui, sans-serif;
+
+  --scanline-op: 0;
+  --grid-op:     0;
+  --sun:         none;
+}
+
 /* Chamfered "cut corner" panels — the tech-schematic signature that
    replaces border-radius everywhere. Border-top accent stripes still
    read correctly since clip-path cuts the whole box uniformly. */
@@ -820,3 +862,277 @@ input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent-2
   .app { grid-template-columns: 1fr; }
   .card, .panel, .stat, .table-wrap { box-shadow: none; break-inside: avoid; }
 }
+
+/* ============================================================
+   BAUHAUS THEME — constructivist overrides
+   Swaps the cyberpunk shape/effect language (clip-path chamfers,
+   neon glow, chromatic-aberration text, glass blur) for geometric
+   purity: square corners or true circles, thick black borders, and
+   hard offset shadows. Colors/fonts come from the token block above;
+   this section only touches structure that isn't var()-driven.
+   ============================================================ */
+[data-theme="bauhaus"] body {
+  letter-spacing: normal;
+}
+[data-theme="bauhaus"] body::before {
+  background-image: radial-gradient(var(--border) 1.5px, transparent 1.5px);
+  background-size: 24px 24px;
+  opacity: 0.06;
+}
+[data-theme="bauhaus"] body::after { display: none; }
+
+/* Square or circle only — no chamfers */
+[data-theme="bauhaus"] .chamfer,
+[data-theme="bauhaus"] .chamfer-sm,
+[data-theme="bauhaus"] .card,
+[data-theme="bauhaus"] .stat,
+[data-theme="bauhaus"] .panel,
+[data-theme="bauhaus"] .table-wrap,
+[data-theme="bauhaus"] .modal,
+[data-theme="bauhaus"] .toast {
+  clip-path: none;
+}
+
+[data-theme="bauhaus"] .glitch-text,
+[data-theme="bauhaus"] .brand-text strong,
+[data-theme="bauhaus"] .view-title {
+  animation: none !important;
+  text-shadow: none !important;
+}
+[data-theme="bauhaus"] .view-title { text-transform: uppercase; font-weight: 900; }
+[data-theme="bauhaus"] .view-title::before { content: ""; }
+[data-theme="bauhaus"] .brand-text small { color: var(--accent-2); }
+
+[data-theme="bauhaus"] .brand-mark {
+  clip-path: none;
+  border-radius: 9999px;
+  border: 2px solid var(--border);
+  box-shadow: 4px 4px 0 0 var(--border);
+}
+
+[data-theme="bauhaus"] .sidebar {
+  backdrop-filter: none;
+  border-right: 4px solid var(--border);
+  box-shadow: none;
+}
+[data-theme="bauhaus"] .sidebar.open { box-shadow: 6px 0 0 0 var(--border); }
+[data-theme="bauhaus"] .topbar {
+  backdrop-filter: none;
+  background: var(--plane);
+  border-bottom: 4px solid var(--border);
+  box-shadow: none;
+}
+
+[data-theme="bauhaus"] .nav-item { text-shadow: none; font-weight: 700; border-left-width: 4px; transition: none; }
+[data-theme="bauhaus"] .nav-item:hover {
+  background: var(--accent-3);
+  border-left-color: var(--border);
+  color: var(--text-1);
+  text-shadow: none;
+}
+[data-theme="bauhaus"] .nav-item[aria-current="true"] {
+  background: var(--accent);
+  border-left-color: var(--border);
+  color: #fff;
+  text-shadow: none;
+}
+[data-theme="bauhaus"] .nav-item[aria-current="true"] .nav-ico { color: #fff; opacity: 1; }
+
+/* Cards/stats/panels/tables: flat white, thick border, blue banner top, hard shadow */
+[data-theme="bauhaus"] .card,
+[data-theme="bauhaus"] .stat,
+[data-theme="bauhaus"] .panel,
+[data-theme="bauhaus"] .table-wrap {
+  backdrop-filter: none;
+  border: 3px solid var(--border);
+  border-top: 8px solid var(--accent-2);
+  box-shadow: var(--shadow);
+}
+[data-theme="bauhaus"] .card { position: relative; }
+[data-theme="bauhaus"] .card::after {
+  content: "";
+  position: absolute; top: 10px; right: 10px; width: 10px; height: 10px;
+  background: var(--accent-3);
+  border: 2px solid var(--border);
+  border-radius: 9999px;
+  pointer-events: none;
+}
+[data-theme="bauhaus"] .stat:hover,
+[data-theme="bauhaus"] .account-card:hover {
+  box-shadow: 8px 8px 0 0 var(--border);
+}
+[data-theme="bauhaus"] .account-card.selected {
+  border-color: var(--border);
+  box-shadow: 8px 8px 0 0 var(--accent);
+}
+[data-theme="bauhaus"] .section-head h2,
+[data-theme="bauhaus"] .panel h3,
+[data-theme="bauhaus"] .empty h3 {
+  text-shadow: none;
+  font-weight: 900;
+}
+[data-theme="bauhaus"] .stat-value { text-shadow: none; font-weight: 900; }
+[data-theme="bauhaus"] .stat-sub.pos,
+[data-theme="bauhaus"] .stat-sub.neg { text-shadow: none; font-weight: 700; }
+
+/* Buttons: flat blocks with a hard offset shadow that flattens on press */
+[data-theme="bauhaus"] .btn {
+  clip-path: none;
+  border-radius: 0;
+  border: 2px solid var(--border);
+  font-weight: 700;
+  box-shadow: 4px 4px 0 0 var(--border);
+  transition: transform 0.12s ease-out, box-shadow 0.12s ease-out;
+}
+[data-theme="bauhaus"] .btn:hover {
+  border-color: var(--border);
+  color: var(--text-1);
+  text-shadow: none;
+  box-shadow: 6px 6px 0 0 var(--border);
+  transform: translate(-2px, -2px);
+}
+[data-theme="bauhaus"] .btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: none;
+}
+[data-theme="bauhaus"] .btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+[data-theme="bauhaus"] .btn-primary::before { content: none; }
+[data-theme="bauhaus"] .btn-primary:hover {
+  background: var(--accent);
+  filter: none;
+  color: #fff;
+}
+[data-theme="bauhaus"] .btn-ghost {
+  border-color: transparent;
+  box-shadow: none;
+}
+[data-theme="bauhaus"] .btn-ghost:hover {
+  border-color: transparent;
+  background: var(--accent-3);
+  color: var(--text-1);
+  box-shadow: none;
+  transform: none;
+}
+[data-theme="bauhaus"] .btn-danger {
+  border-color: var(--critical);
+  color: var(--critical);
+  box-shadow: 4px 4px 0 0 var(--critical);
+}
+[data-theme="bauhaus"] .btn-danger:hover {
+  background: var(--critical);
+  color: #fff;
+  box-shadow: 6px 6px 0 0 var(--critical);
+  text-shadow: none;
+}
+
+/* Inputs: square, thick border, blue focus ring instead of glow */
+[data-theme="bauhaus"] .input,
+[data-theme="bauhaus"] select.input,
+[data-theme="bauhaus"] textarea.input {
+  clip-path: none;
+  border-radius: 0;
+  border: 2px solid var(--border);
+  font-weight: 500;
+}
+[data-theme="bauhaus"] .input:focus {
+  border-color: var(--accent-2);
+  box-shadow: none;
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+[data-theme="bauhaus"] .input[aria-invalid="true"] { border-color: var(--critical); }
+[data-theme="bauhaus"] .input[aria-invalid="true"]:focus { outline-color: var(--critical); box-shadow: none; }
+
+/* Badges: solid geometric fills, not glow outlines */
+[data-theme="bauhaus"] .badge {
+  border: 2px solid var(--border);
+  border-radius: 0;
+  box-shadow: none;
+  font-weight: 700;
+}
+[data-theme="bauhaus"] .badge.accent { background: var(--accent); color: #fff; box-shadow: none; }
+[data-theme="bauhaus"] .badge.good { background: var(--good); color: #fff; box-shadow: none; }
+[data-theme="bauhaus"] .badge.warn { background: var(--accent-3); color: var(--text-1); box-shadow: none; }
+[data-theme="bauhaus"] .badge.crit { background: var(--critical); color: #fff; box-shadow: none; }
+
+/* Progress bars: flat fill, no glow */
+[data-theme="bauhaus"] .progress { border-radius: 0; border: 2px solid var(--border); background: #fff; }
+[data-theme="bauhaus"] .progress > span,
+[data-theme="bauhaus"] .progress.good > span { background: var(--accent-2); box-shadow: none; }
+[data-theme="bauhaus"] .progress.good > span { background: var(--good); }
+
+/* Charts */
+[data-theme="bauhaus"] .chart svg { filter: none; }
+[data-theme="bauhaus"] .legend-swatch,
+[data-theme="bauhaus"] .stat .dot { box-shadow: none; border: 2px solid var(--border); border-radius: 0; }
+[data-theme="bauhaus"] .bar-track { fill: #e0e0e0; }
+
+/* Modal: keep the three-dot chrome (it's already red/blue/yellow) but flatten it */
+[data-theme="bauhaus"] .modal {
+  border: 4px solid var(--border);
+  box-shadow: 8px 8px 0 0 var(--border);
+  animation: none;
+}
+[data-theme="bauhaus"] .modal-backdrop { background: rgba(18, 18, 18, 0.55); backdrop-filter: none; }
+[data-theme="bauhaus"] .modal-head {
+  background: var(--accent-3);
+  border-bottom: 4px solid var(--border);
+}
+[data-theme="bauhaus"] .modal-head h2 { text-shadow: none; color: var(--text-1); }
+[data-theme="bauhaus"] .calc-preview {
+  background: var(--accent-3);
+  border: 2px solid var(--border);
+  border-left: 6px solid var(--accent-2);
+}
+[data-theme="bauhaus"] .calc-preview .row strong { color: var(--accent-2); }
+
+/* Chips */
+[data-theme="bauhaus"] .chip {
+  clip-path: none;
+  border-radius: 0;
+  border: 2px solid var(--border);
+  font-weight: 700;
+}
+[data-theme="bauhaus"] .chip:hover { border-color: var(--border); color: var(--text-1); background: var(--accent-3); box-shadow: none; }
+[data-theme="bauhaus"] .chip-toggle.on {
+  color: #fff;
+  background: var(--accent-2);
+  border-color: var(--border);
+  box-shadow: none;
+}
+
+/* Tables */
+[data-theme="bauhaus"] table.data th { background: var(--accent-3); color: var(--text-1); font-weight: 700; }
+[data-theme="bauhaus"] table.data tr:hover td { background: #f5f5f5; }
+[data-theme="bauhaus"] table.data td[data-label]::before { color: var(--accent-2); }
+
+/* Toast */
+[data-theme="bauhaus"] .toast {
+  background: #fff;
+  border: 2px solid var(--border);
+  border-left: 6px solid var(--accent-2);
+  box-shadow: 4px 4px 0 0 var(--border);
+  animation: none;
+}
+[data-theme="bauhaus"] .toast.good { border-left-color: var(--good); }
+[data-theme="bauhaus"] .toast.err { border-left-color: var(--critical); }
+[data-theme="bauhaus"] .toast-action {
+  clip-path: none;
+  border-radius: 0;
+  border: 2px solid var(--border);
+  color: var(--text-1);
+}
+[data-theme="bauhaus"] .toast-action:hover { background: var(--accent-3); }
+
+/* Mobile FAB / bottom-nav "+" — circle, per the binary radius rule */
+[data-theme="bauhaus"] .fab,
+[data-theme="bauhaus"] .bottom-nav-log-plus {
+  clip-path: none;
+  border-radius: 9999px;
+  border: 2px solid var(--border);
+  box-shadow: 4px 4px 0 0 var(--border);
+}
+[data-theme="bauhaus"] .bottom-nav { border-top: 4px solid var(--border); }

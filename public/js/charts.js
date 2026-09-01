@@ -5,18 +5,20 @@ import { money, moneyCompact, pct, escapeHtml, dateLabel } from './format.js';
 // Categorical palette (validated order). Light stays print-safe; dark goes neon.
 // Index 1 (income) and 5 (expenses) are kept high-contrast — see compareBars callers.
 const PALETTE = {
-  light: ['#2a78d6', '#008300', '#e87ba4', '#eda100', '#1baf7a', '#eb6834', '#4a3aa7', '#e34948'],
-  dark:  ['#00ffff', '#00ff9f', '#ff00ff', '#ffcf1a', '#b47bff', '#ff6a3d', '#5ad1ff', '#ff4d6d'],
+  light:   ['#2a78d6', '#008300', '#e87ba4', '#eda100', '#1baf7a', '#eb6834', '#4a3aa7', '#e34948'],
+  dark:    ['#00ffff', '#00ff9f', '#ff00ff', '#ffcf1a', '#b47bff', '#ff6a3d', '#5ad1ff', '#ff4d6d'],
+  bauhaus: ['#D02020', '#1040C0', '#F0C020', '#121212', '#8a3a10', '#1a6b3a', '#6a1ba8', '#c05a00'],
 };
 
 function theme() {
-  return document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+  const t = document.documentElement.dataset.theme;
+  return (t === 'light' || t === 'bauhaus') ? t : 'dark';
 }
 export function seriesColor(i) {
   const p = PALETTE[theme()];
   return p[i % p.length];
 }
-function surface() { return theme() === 'light' ? '#fcfcfb' : '#1a1a19'; }
+function surface() { return theme() === 'dark' ? '#1a1a19' : '#fcfcfb'; }
 
 /**
  * Donut chart with legend. `items` = [{ category, amount }] (already sorted desc).
