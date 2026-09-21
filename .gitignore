@@ -13,3 +13,5 @@ env/
 wslenv/
 __pycache__/
 *.pyc.pytest_cache/
+FEATURES.md
+FEATURES.pdf
