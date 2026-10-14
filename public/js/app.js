@@ -1,7 +1,7 @@
 // app.js — main controller: routing, wiring, data menu
 
 import * as store from './store.js';
-import { setCurrency, CURRENCIES, todayISO } from './format.js';
+import { setCurrency, CURRENCIES, todayISO, escapeHtml } from './format.js';
 import { initModalChrome, openModal, closeModal, toast, confirmDialog, download } from './ui.js';
 import { openForm, hasForm, openAdjustBalance, deleteRecord } from './forms.js';
 import { dueSoon, nextOccurrence } from './calc.js';
@@ -481,6 +481,42 @@ function wire() {
   //    render would blow away the field mid-type).
   //  - statement: no list fragment to patch, so it takes a full render and
   //    puts the caret back where it was.
+  // Line chart hover: snap to the nearest point and show its date + value.
+  const chartHover = (e, hide) => {
+    const box = e.target.closest?.('.linechart');
+    document.querySelectorAll('.linechart').forEach(c => {
+      if (c === box && !hide) return;
+      c.querySelector('.lc-cursor').style.display = 'none';
+      c.querySelector('.lc-dot').style.display = 'none';
+      c.querySelector('.lc-tip').style.display = 'none';
+    });
+    if (!box || hide) return;
+    const svg = box.querySelector('svg');
+    const rect = svg.getBoundingClientRect();
+    if (!rect.width) return;
+    const pts = JSON.parse(box.dataset.pts);
+    const vx = ((e.clientX - rect.left) / rect.width) * Number(box.dataset.w);
+    let best = pts[0];
+    for (const p of pts) if (Math.abs(p[0] - vx) < Math.abs(best[0] - vx)) best = p;
+    const cursor = box.querySelector('.lc-cursor');
+    cursor.setAttribute('x1', best[0]); cursor.setAttribute('x2', best[0]);
+    cursor.style.display = '';
+    const dot = box.querySelector('.lc-dot');
+    dot.setAttribute('cx', best[0]); dot.setAttribute('cy', best[1]);
+    dot.style.display = '';
+    const tip = box.querySelector('.lc-tip');
+    tip.innerHTML = `<div style="color:var(--muted)">${escapeHtml(best[2])}</div><strong>${escapeHtml(best[3])}</strong>`;
+    tip.style.display = '';
+    const px = (best[0] / Number(box.dataset.w)) * rect.width;
+    const py = (best[1] / Number(box.dataset.h)) * rect.height;
+    const flip = px + tip.offsetWidth + 16 > rect.width;
+    tip.style.left = `${flip ? px - tip.offsetWidth - 12 : px + 12}px`;
+    tip.style.top = `${Math.max(0, py - tip.offsetHeight - 8)}px`;
+  };
+  const viewEl = document.getElementById('view-container');
+  viewEl.addEventListener('pointermove', e => chartHover(e, false));
+  viewEl.addEventListener('pointerleave', e => chartHover(e, true));
+
   let searchTimer;
   document.getElementById('view-container').addEventListener('input', e => {
     const search = e.target.closest('[data-kw-search]');

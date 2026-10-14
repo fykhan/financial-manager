@@ -140,15 +140,23 @@ export function lineChart(points, { height = 160, format = money } = {}) {
   const zeroY = yFor(0);
   const showZero = min < 0 && max > 0;
 
-  return `<div>
-    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Balance over time" style="width:100%;height:${height}px;display:block">
-      ${showZero ? `<line x1="${pad}" y1="${zeroY.toFixed(1)}" x2="${width - pad}" y2="${zeroY.toFixed(1)}" stroke="var(--border-2)" stroke-dasharray="4 4" />` : ''}
+  // Precomputed for the hover handler in app.js: [x, y, date label, value label] per point.
+  const hoverPts = points.map((p, i) => [
+    +xFor(i).toFixed(1), +yFor(p.balance).toFixed(1),
+    p.date ? dateLabel(p.date) : 'Opening balance', format(p.balance),
+  ]);
+
+  return `<div class="linechart" style="position:relative" data-w="${width}" data-h="${height}" data-pts="${escapeHtml(JSON.stringify(hoverPts))}">
+    <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Balance over time" style="width:100%;height:${height}px;display:block">      ${showZero ? `<line x1="${pad}" y1="${zeroY.toFixed(1)}" x2="${width - pad}" y2="${zeroY.toFixed(1)}" stroke="var(--border-2)" stroke-dasharray="4 4" />` : ''}
       <path d="${areaPath}" fill="${color}" opacity="0.12" stroke="none" />
       <path d="${linePath}" fill="none" stroke="${color}" stroke-width="2.5" />
       <circle cx="${xFor(points.length - 1).toFixed(1)}" cy="${yFor(last.balance).toFixed(1)}" r="4" fill="${color}">
         <title>${escapeHtml(dateLabel(last.date))}: ${escapeHtml(format(last.balance))}</title>
       </circle>
+      <line class="lc-cursor" y1="${pad}" y2="${height - pad}" stroke="var(--muted)" stroke-dasharray="3 3" style="display:none" />
+      <circle class="lc-dot" r="5" fill="${color}" stroke="var(--surface, #fff)" stroke-width="2" style="display:none" />
     </svg>
+    <div class="lc-tip" style="display:none;position:absolute;top:0;left:0;pointer-events:none;z-index:5;padding:6px 10px;border-radius:8px;font-size:12px;white-space:nowrap;background:var(--surface, #fff);color:var(--text, inherit);border:1px solid var(--border-2);box-shadow:0 4px 12px rgba(0,0,0,.2)"></div>
     <div class="flex between" style="font-size:12px;color:var(--muted);margin-top:6px">
       <span>${escapeHtml(dateLabel(points[0].date))} · ${escapeHtml(format(points[0].balance))}</span>
       <span>${escapeHtml(dateLabel(last.date))} · ${escapeHtml(format(last.balance))}</span>
