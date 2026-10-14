@@ -111,6 +111,47 @@ export function progressBar(fraction, { good = false, height = 8 } = {}) {
   return `<div class="progress ${good ? 'good' : ''}" style="height:${height}px"><span style="width:${w}%"></span></div>`;
 }
 
+const dayISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/**
+ * One hover stop per calendar day, positioned on the drawn line (which stays
+ * one-vertex-per-point). Days between two points are spread along the segment
+ * joining them and carry the earlier balance forward until the next point's day.
+ * Returns [x, y, date, balance, isOpening]. An undated first point (the opening
+ * balance) counts as the day before the first dated point.
+ */
+function dailyStops(points, xFor, yFor) {
+  const day = iso => new Date(iso + 'T00:00:00');
+  const stops = new Map();
+  let prev = null; // { date, balance, i, opening }
+  points.forEach((p, i) => {
+    if (!p.date) { prev = { date: null, balance: p.balance, i, opening: true }; return; }
+    if (prev && prev.opening) {
+      const d = day(p.date); d.setDate(d.getDate() - 1);
+      prev.date = dayISO(d);
+    }
+    if (prev) {
+      const d0 = day(prev.date), d1 = day(p.date);
+      const span = Math.round((d1 - d0) / 864e5);
+      for (let k = prev.opening || stops.has(prev.date) ? 0 : 1; k <= span; k++) {
+        if (k === 0 && !prev.opening) continue;
+        const t = span ? k / span : 1;
+        const d = new Date(d0); d.setDate(d.getDate() + k);
+        const last = k === span;
+        stops.set(dayISO(d), [
+          +(xFor(prev.i) + (xFor(i) - xFor(prev.i)) * t).toFixed(1),
+          +(yFor(prev.balance) + (yFor(p.balance) - yFor(prev.balance)) * t).toFixed(1),
+          dayISO(d), last ? p.balance : prev.balance, k === 0 ? 1 : 0,
+        ]);
+      }
+    } else {
+      stops.set(p.date, [+xFor(i).toFixed(1), +yFor(p.balance).toFixed(1), p.date, p.balance, 0]);
+    }
+    prev = { date: p.date, balance: p.balance, i, opening: false };
+  });
+  return [...stops.values()];
+}
+
 /**
  * Chronological line chart for a running balance. `points` = [{ date, balance }]
  * already in ascending date order (see calc.js's accountBalanceHistory /
@@ -140,10 +181,8 @@ export function lineChart(points, { height = 160, format = money } = {}) {
   const zeroY = yFor(0);
   const showZero = min < 0 && max > 0;
 
-  // Raw points for the hover handler in app.js, which interpolates between them: [x, y, date, balance].
-  const hoverPts = points.map((p, i) => [
-    +xFor(i).toFixed(1), +yFor(p.balance).toFixed(1), p.date || null, p.balance,
-  ]);
+  // One hover stop per day, sitting on the line: [x, y, date, balance, isOpening].
+  const hoverPts = dailyStops(points, xFor, yFor);
 
   return `<div class="linechart" style="position:relative" data-w="${width}" data-h="${height}" data-pts="${escapeHtml(JSON.stringify(hoverPts))}">
     <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Balance over time" style="width:100%;height:${height}px;display:block">      ${showZero ? `<line x1="${pad}" y1="${zeroY.toFixed(1)}" x2="${width - pad}" y2="${zeroY.toFixed(1)}" stroke="var(--border-2)" stroke-dasharray="4 4" />` : ''}

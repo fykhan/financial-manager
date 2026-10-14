@@ -475,9 +475,7 @@ function wire() {
     render();
   });
 
-  // Line chart hover: track the cursor exactly, interpolating date + value
-  // along the line between the two surrounding data points.
-  const isoOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  // Line chart hover: snap to the nearest day (the chart has one point per day).
   const chartHover = (e, hide) => {
     const box = e.target.closest?.('.linechart');
     document.querySelectorAll('.linechart').forEach(c => {
@@ -491,23 +489,11 @@ function wire() {
     const rect = svg.getBoundingClientRect();
     if (!rect.width) return;
     const pts = JSON.parse(box.dataset.pts);
-    const vx = Math.max(pts[0][0], Math.min(pts[pts.length - 1][0],
-      ((e.clientX - rect.left) / rect.width) * Number(box.dataset.w)));
-    let i = 1;
-    while (i < pts.length - 1 && pts[i][0] < vx) i++;
-    const [x0, y0, d0, b0] = pts[i - 1];
-    const [x1, y1, d1, b1] = pts[i];
-    const t = x1 === x0 ? 0 : (vx - x0) / (x1 - x0);
-    const cy = y0 + (y1 - y0) * t;
-    const bal = b0 + (b1 - b0) * t;
-    let label;
-    if (!d1) label = 'Opening balance';
-    else if (!d0) label = dateLabel(d1);
-    else {
-      const ms = new Date(d0 + 'T00:00:00').getTime();
-      const me = new Date(d1 + 'T00:00:00').getTime();
-      label = dateLabel(isoOf(new Date(ms + (me - ms) * t)));
-    }
+    const cx = ((e.clientX - rect.left) / rect.width) * Number(box.dataset.w);
+    let best = pts[0];
+    for (const p of pts) if (Math.abs(p[0] - cx) < Math.abs(best[0] - cx)) best = p;
+    const [vx, cy, date, bal, opening] = best;
+    const label = opening ? 'Opening balance' : dateLabel(date);
     const cursor = box.querySelector('.lc-cursor');
     cursor.setAttribute('x1', vx); cursor.setAttribute('x2', vx);
     cursor.style.display = '';
