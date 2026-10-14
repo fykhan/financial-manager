@@ -114,30 +114,42 @@ export function progressBar(fraction, { good = false, height = 8 } = {}) {
 const dayISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 /**
- * Expand [{ date, balance }] to one point per calendar day, carrying the last
- * balance forward over days with no activity. A leading undated point (the
- * opening balance) is placed the day before the first dated point. Falls back
- * to the input as-is if there's nothing dated to expand.
+ * One hover stop per calendar day, positioned on the drawn line (which stays
+ * one-vertex-per-point). Days between two points are spread along the segment
+ * joining them and carry the earlier balance forward until the next point's day.
+ * Returns [x, y, date, balance, isOpening]. An undated first point (the opening
+ * balance) counts as the day before the first dated point.
  */
-function toDaily(points) {
-  const byDay = new Map();
-  for (const p of points) if (p.date) byDay.set(p.date, p.balance); // last entry of a day wins
-  if (!byDay.size) return points;
-  const days = [...byDay.keys()].sort();
-  const start = new Date(days[0] + 'T00:00:00');
-  const end = new Date(days[days.length - 1] + 'T00:00:00');
-  const out = [];
-  let balance = points[0].date ? byDay.get(days[0]) : points[0].balance;
-  if (!points[0].date) {
-    const before = new Date(start); before.setDate(before.getDate() - 1);
-    out.push({ date: dayISO(before), balance, opening: true });
-  }
-  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-    const iso = dayISO(d);
-    if (byDay.has(iso)) balance = byDay.get(iso);
-    out.push({ date: iso, balance });
-  }
-  return out;
+function dailyStops(points, xFor, yFor) {
+  const day = iso => new Date(iso + 'T00:00:00');
+  const stops = new Map();
+  let prev = null; // { date, balance, i, opening }
+  points.forEach((p, i) => {
+    if (!p.date) { prev = { date: null, balance: p.balance, i, opening: true }; return; }
+    if (prev && prev.opening) {
+      const d = day(p.date); d.setDate(d.getDate() - 1);
+      prev.date = dayISO(d);
+    }
+    if (prev) {
+      const d0 = day(prev.date), d1 = day(p.date);
+      const span = Math.round((d1 - d0) / 864e5);
+      for (let k = prev.opening || stops.has(prev.date) ? 0 : 1; k <= span; k++) {
+        if (k === 0 && !prev.opening) continue;
+        const t = span ? k / span : 1;
+        const d = new Date(d0); d.setDate(d.getDate() + k);
+        const last = k === span;
+        stops.set(dayISO(d), [
+          +(xFor(prev.i) + (xFor(i) - xFor(prev.i)) * t).toFixed(1),
+          +(yFor(prev.balance) + (yFor(p.balance) - yFor(prev.balance)) * t).toFixed(1),
+          dayISO(d), last ? p.balance : prev.balance, k === 0 ? 1 : 0,
+        ]);
+      }
+    } else {
+      stops.set(p.date, [+xFor(i).toFixed(1), +yFor(p.balance).toFixed(1), p.date, p.balance, 0]);
+    }
+    prev = { date: p.date, balance: p.balance, i, opening: false };
+  });
+  return [...stops.values()];
 }
 
 /**
@@ -146,11 +158,10 @@ function toDaily(points) {
  * netWorthHistory). Draws a dashed zero-line when the series crosses zero,
  * since that's the "went negative" moment that matters most here.
  */
-export function lineChart(rawPoints, { height = 160, format = money } = {}) {
-  if (!rawPoints || rawPoints.length < 2) {
+export function lineChart(points, { height = 160, format = money } = {}) {
+  if (!points || points.length < 2) {
     return `<div class="empty" style="padding:30px"><div class="empty-ico">↝</div><p>Not enough history yet — log a few transactions to see a trend.</p></div>`;
   }
-  const points = toDaily(rawPoints);
 
   const width = 560;
   const pad = 10;
@@ -170,10 +181,8 @@ export function lineChart(rawPoints, { height = 160, format = money } = {}) {
   const zeroY = yFor(0);
   const showZero = min < 0 && max > 0;
 
-  // One entry per day for the hover handler in app.js: [x, y, date, balance, isOpening].
-  const hoverPts = points.map((p, i) => [
-    +xFor(i).toFixed(1), +yFor(p.balance).toFixed(1), p.date, p.balance, p.opening ? 1 : 0,
-  ]);
+  // One hover stop per day, sitting on the line: [x, y, date, balance, isOpening].
+  const hoverPts = dailyStops(points, xFor, yFor);
 
   return `<div class="linechart" style="position:relative" data-w="${width}" data-h="${height}" data-pts="${escapeHtml(JSON.stringify(hoverPts))}">
     <svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Balance over time" style="width:100%;height:${height}px;display:block">      ${showZero ? `<line x1="${pad}" y1="${zeroY.toFixed(1)}" x2="${width - pad}" y2="${zeroY.toFixed(1)}" stroke="var(--border-2)" stroke-dasharray="4 4" />` : ''}
@@ -187,7 +196,7 @@ export function lineChart(rawPoints, { height = 160, format = money } = {}) {
     </svg>
     <div class="lc-tip" style="display:none;position:absolute;top:0;left:0;pointer-events:none;z-index:5;padding:6px 10px;border-radius:8px;font-size:12px;white-space:nowrap;background:var(--surface, #fff);color:var(--text, inherit);border:1px solid var(--border-2);box-shadow:0 4px 12px rgba(0,0,0,.2)"></div>
     <div class="flex between" style="font-size:12px;color:var(--muted);margin-top:6px">
-      <span>${escapeHtml(dateLabel(rawPoints[0].date))} · ${escapeHtml(format(rawPoints[0].balance))}</span>
+      <span>${escapeHtml(dateLabel(points[0].date))} · ${escapeHtml(format(points[0].balance))}</span>
       <span>${escapeHtml(dateLabel(last.date))} · ${escapeHtml(format(last.balance))}</span>
     </div>
   </div>`;
