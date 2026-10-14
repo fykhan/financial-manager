@@ -111,16 +111,46 @@ export function progressBar(fraction, { good = false, height = 8 } = {}) {
   return `<div class="progress ${good ? 'good' : ''}" style="height:${height}px"><span style="width:${w}%"></span></div>`;
 }
 
+const dayISO = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+/**
+ * Expand [{ date, balance }] to one point per calendar day, carrying the last
+ * balance forward over days with no activity. A leading undated point (the
+ * opening balance) is placed the day before the first dated point. Falls back
+ * to the input as-is if there's nothing dated to expand.
+ */
+function toDaily(points) {
+  const byDay = new Map();
+  for (const p of points) if (p.date) byDay.set(p.date, p.balance); // last entry of a day wins
+  if (!byDay.size) return points;
+  const days = [...byDay.keys()].sort();
+  const start = new Date(days[0] + 'T00:00:00');
+  const end = new Date(days[days.length - 1] + 'T00:00:00');
+  const out = [];
+  let balance = points[0].date ? byDay.get(days[0]) : points[0].balance;
+  if (!points[0].date) {
+    const before = new Date(start); before.setDate(before.getDate() - 1);
+    out.push({ date: dayISO(before), balance, opening: true });
+  }
+  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    const iso = dayISO(d);
+    if (byDay.has(iso)) balance = byDay.get(iso);
+    out.push({ date: iso, balance });
+  }
+  return out;
+}
+
 /**
  * Chronological line chart for a running balance. `points` = [{ date, balance }]
  * already in ascending date order (see calc.js's accountBalanceHistory /
  * netWorthHistory). Draws a dashed zero-line when the series crosses zero,
  * since that's the "went negative" moment that matters most here.
  */
-export function lineChart(points, { height = 160, format = money } = {}) {
-  if (!points || points.length < 2) {
+export function lineChart(rawPoints, { height = 160, format = money } = {}) {
+  if (!rawPoints || rawPoints.length < 2) {
     return `<div class="empty" style="padding:30px"><div class="empty-ico">↝</div><p>Not enough history yet — log a few transactions to see a trend.</p></div>`;
   }
+  const points = toDaily(rawPoints);
 
   const width = 560;
   const pad = 10;
@@ -140,9 +170,9 @@ export function lineChart(points, { height = 160, format = money } = {}) {
   const zeroY = yFor(0);
   const showZero = min < 0 && max > 0;
 
-  // Raw points for the hover handler in app.js, which interpolates between them: [x, y, date, balance].
+  // One entry per day for the hover handler in app.js: [x, y, date, balance, isOpening].
   const hoverPts = points.map((p, i) => [
-    +xFor(i).toFixed(1), +yFor(p.balance).toFixed(1), p.date || null, p.balance,
+    +xFor(i).toFixed(1), +yFor(p.balance).toFixed(1), p.date, p.balance, p.opening ? 1 : 0,
   ]);
 
   return `<div class="linechart" style="position:relative" data-w="${width}" data-h="${height}" data-pts="${escapeHtml(JSON.stringify(hoverPts))}">
@@ -157,7 +187,7 @@ export function lineChart(points, { height = 160, format = money } = {}) {
     </svg>
     <div class="lc-tip" style="display:none;position:absolute;top:0;left:0;pointer-events:none;z-index:5;padding:6px 10px;border-radius:8px;font-size:12px;white-space:nowrap;background:var(--surface, #fff);color:var(--text, inherit);border:1px solid var(--border-2);box-shadow:0 4px 12px rgba(0,0,0,.2)"></div>
     <div class="flex between" style="font-size:12px;color:var(--muted);margin-top:6px">
-      <span>${escapeHtml(dateLabel(points[0].date))} · ${escapeHtml(format(points[0].balance))}</span>
+      <span>${escapeHtml(dateLabel(rawPoints[0].date))} · ${escapeHtml(format(rawPoints[0].balance))}</span>
       <span>${escapeHtml(dateLabel(last.date))} · ${escapeHtml(format(last.balance))}</span>
     </div>
   </div>`;
