@@ -1,7 +1,7 @@
 // app.js — main controller: routing, wiring, data menu
 
 import * as store from './store.js';
-import { setCurrency, CURRENCIES, todayISO, escapeHtml } from './format.js';
+import { setCurrency, CURRENCIES, todayISO, escapeHtml, money, dateLabel } from './format.js';
 import { initModalChrome, openModal, closeModal, toast, confirmDialog, download } from './ui.js';
 import { openForm, hasForm, openAdjustBalance, deleteRecord } from './forms.js';
 import { dueSoon, nextOccurrence } from './calc.js';
@@ -475,13 +475,9 @@ function wire() {
     render();
   });
 
-  // Keyword search, shared by the Transactions ledger and the Statement.
-  // Debounced either way; how the result is applied differs by scope:
-  //  - txn: patch ONLY the list fragment so the input keeps focus (a full
-  //    render would blow away the field mid-type).
-  //  - statement: no list fragment to patch, so it takes a full render and
-  //    puts the caret back where it was.
-  // Line chart hover: snap to the nearest point and show its date + value.
+  // Line chart hover: track the cursor exactly, interpolating date + value
+  // along the line between the two surrounding data points.
+  const isoOf = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const chartHover = (e, hide) => {
     const box = e.target.closest?.('.linechart');
     document.querySelectorAll('.linechart').forEach(c => {
@@ -495,20 +491,34 @@ function wire() {
     const rect = svg.getBoundingClientRect();
     if (!rect.width) return;
     const pts = JSON.parse(box.dataset.pts);
-    const vx = ((e.clientX - rect.left) / rect.width) * Number(box.dataset.w);
-    let best = pts[0];
-    for (const p of pts) if (Math.abs(p[0] - vx) < Math.abs(best[0] - vx)) best = p;
+    const vx = Math.max(pts[0][0], Math.min(pts[pts.length - 1][0],
+      ((e.clientX - rect.left) / rect.width) * Number(box.dataset.w)));
+    let i = 1;
+    while (i < pts.length - 1 && pts[i][0] < vx) i++;
+    const [x0, y0, d0, b0] = pts[i - 1];
+    const [x1, y1, d1, b1] = pts[i];
+    const t = x1 === x0 ? 0 : (vx - x0) / (x1 - x0);
+    const cy = y0 + (y1 - y0) * t;
+    const bal = b0 + (b1 - b0) * t;
+    let label;
+    if (!d1) label = 'Opening balance';
+    else if (!d0) label = dateLabel(d1);
+    else {
+      const ms = new Date(d0 + 'T00:00:00').getTime();
+      const me = new Date(d1 + 'T00:00:00').getTime();
+      label = dateLabel(isoOf(new Date(ms + (me - ms) * t)));
+    }
     const cursor = box.querySelector('.lc-cursor');
-    cursor.setAttribute('x1', best[0]); cursor.setAttribute('x2', best[0]);
+    cursor.setAttribute('x1', vx); cursor.setAttribute('x2', vx);
     cursor.style.display = '';
     const dot = box.querySelector('.lc-dot');
-    dot.setAttribute('cx', best[0]); dot.setAttribute('cy', best[1]);
+    dot.setAttribute('cx', vx); dot.setAttribute('cy', cy);
     dot.style.display = '';
     const tip = box.querySelector('.lc-tip');
-    tip.innerHTML = `<div style="color:var(--muted)">${escapeHtml(best[2])}</div><strong>${escapeHtml(best[3])}</strong>`;
+    tip.innerHTML = `<div style="color:var(--muted)">${escapeHtml(label)}</div><strong>${escapeHtml(money(bal))}</strong>`;
     tip.style.display = '';
-    const px = (best[0] / Number(box.dataset.w)) * rect.width;
-    const py = (best[1] / Number(box.dataset.h)) * rect.height;
+    const px = (vx / Number(box.dataset.w)) * rect.width;
+    const py = (cy / Number(box.dataset.h)) * rect.height;
     const flip = px + tip.offsetWidth + 16 > rect.width;
     tip.style.left = `${flip ? px - tip.offsetWidth - 12 : px + 12}px`;
     tip.style.top = `${Math.max(0, py - tip.offsetHeight - 8)}px`;
@@ -517,6 +527,12 @@ function wire() {
   viewEl.addEventListener('pointermove', e => chartHover(e, false));
   viewEl.addEventListener('pointerleave', e => chartHover(e, true));
 
+  // Keyword search, shared by the Transactions ledger and the Statement.
+  // Debounced either way; how the result is applied differs by scope:
+  //  - txn: patch ONLY the list fragment so the input keeps focus (a full
+  //    render would blow away the field mid-type).
+  //  - statement: no list fragment to patch, so it takes a full render and
+  //    puts the caret back where it was.
   let searchTimer;
   document.getElementById('view-container').addEventListener('input', e => {
     const search = e.target.closest('[data-kw-search]');

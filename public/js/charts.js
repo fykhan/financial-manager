@@ -140,10 +140,9 @@ export function lineChart(points, { height = 160, format = money } = {}) {
   const zeroY = yFor(0);
   const showZero = min < 0 && max > 0;
 
-  // Precomputed for the hover handler in app.js: [x, y, date label, value label] per point.
+  // Raw points for the hover handler in app.js, which interpolates between them: [x, y, date, balance].
   const hoverPts = points.map((p, i) => [
-    +xFor(i).toFixed(1), +yFor(p.balance).toFixed(1),
-    p.date ? dateLabel(p.date) : 'Opening balance', format(p.balance),
+    +xFor(i).toFixed(1), +yFor(p.balance).toFixed(1), p.date || null, p.balance,
   ]);
 
   return `<div class="linechart" style="position:relative" data-w="${width}" data-h="${height}" data-pts="${escapeHtml(JSON.stringify(hoverPts))}">
