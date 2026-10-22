@@ -225,6 +225,7 @@ re-renders once ready. Non-collection views like `guide`/`statement` have no add
 
 ## Other directories in this working tree
 
-`financial-manager/` (this project) sits alongside a sibling `savrr/` directory at the workspace
-root — a separate, essentially empty git repo (blank `README.md`, no code yet). They are unrelated
-projects; nothing in `savrr/` is part of GradPlan.
+`financial-manager/` (this project) sits alongside a sibling `savrr-backend/` (FastAPI + Supabase
+backend, formerly `savrr/`) and `savrr-mobile-app/` (React Native client, empty so far) directories at
+the workspace root — separate git repos. Savrr reuses GradPlan's domain logic, but nothing in them is
+part of GradPlan.
